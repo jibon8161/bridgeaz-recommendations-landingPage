@@ -239,24 +239,52 @@ function RecommendationCard({ item, theme, index }) {
           href={item.link}
           target="_blank"
           rel="noreferrer"
-          className="mt-7 inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-black text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03]"
+          className="relative mt-7 inline-flex items-center gap-2 overflow-hidden rounded-full border bg-white px-5 py-3 text-sm font-black text-[#071A4A] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03]"
           style={{
-            background: `linear-gradient(
-      135deg,
-      #071A4A 0%,
-      ${theme.primary} 55%,
-      #071A4A 100%
-    )`,
-            border: `1px solid ${theme.secondary}`,
+            borderColor: `${theme.secondary}66`,
             boxShadow: `
-      0 10px 28px rgba(7, 26, 74, 0.35),
-      0 0 0 3px ${theme.secondary}22
+      0 8px 22px rgba(7,26,74,0.12),
+      0 0 0 1px ${theme.secondary}22
     `,
-            color: "#ffffff",
           }}
         >
-          <span>View Details</span>
-          <span>→</span>
+          {/* animated glow */}
+          <motion.div
+            animate={{
+              x: ["-120%", "120%"],
+            }}
+            transition={{
+              repeat: Infinity,
+              duration: 2.6,
+              ease: "linear",
+            }}
+            className="absolute inset-0 opacity-80"
+            style={{
+              background: `linear-gradient(
+        90deg,
+        transparent,
+        ${theme.secondary}55,
+        transparent
+      )`,
+            }}
+          />
+
+          {/* top edge light */}
+          <div
+            className="absolute inset-x-0 top-0 h-[1px]"
+            style={{
+              background: `linear-gradient(
+        90deg,
+        transparent,
+        ${theme.secondary},
+        transparent
+      )`,
+            }}
+          />
+
+          <span className="relative z-10">View Details</span>
+
+          <span className="relative z-10">→</span>
         </a>
       ) : (
         <p className="mt-7 text-sm font-semibold text-[#0B3694]">
@@ -432,7 +460,7 @@ const animatedNames = getAnimatedNames(profile?.firstName);
 
   return (
     <main
-      className="relative min-h-screen w-screen overflow-x-hidden overflow-y-hidden"
+      className="relative min-h-screen overflow-hidden"
       style={{
         fontFamily: `${profile.theme.font || "Inter"}, sans-serif`,
         backgroundColor: profile.theme.background || "#F7F7F7",
@@ -445,118 +473,88 @@ const animatedNames = getAnimatedNames(profile?.firstName);
         <motion.div
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-9999 flex items-center justify-center overflow-hidden px-6"
+          className="fixed inset-0 z-[9999] overflow-hidden"
           style={{
-            background: `
-      radial-gradient(circle at 25% 30%, ${profile.theme.secondary}55, transparent 35%),
-      radial-gradient(circle at 80% 40%, ${profile.theme.primary}66, transparent 40%),
-      linear-gradient(135deg, #0f172a, ${profile.theme.primary})
-    `,
-            backdropFilter: "blur(18px)",
+            background: `linear-gradient(135deg, #071A4A 0%, ${profile.theme.primary} 45%, ${profile.theme.secondary} 100%)`,
           }}
         >
-          <div className="relative flex h-screen w-full items-center justify-center overflow-hidden text-white">
-            {/* flying cloud layers */}
-            <motion.div
-              initial={{ scale: 1.8, opacity: 0.9 }}
-              animate={{ scale: 0.9, opacity: 0 }}
-              transition={{ duration: 6, ease: "easeInOut" }}
-              className="absolute inset-0"
-              style={{
-                background: `
-        radial-gradient(circle at 20% 40%, rgba(255,255,255,0.85), transparent 22%),
-        radial-gradient(circle at 70% 30%, rgba(255,255,255,0.65), transparent 24%),
-        radial-gradient(circle at 45% 70%, rgba(255,255,255,0.75), transparent 28%)
-      `,
-                filter: "blur(30px)",
-              }}
-            />
+          <motion.div
+            animate={{ scale: [1, 1.15, 1], opacity: [0.25, 0.5, 0.25] }}
+            transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
+            className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20 blur-3xl"
+          />
 
-            <motion.div
-              initial={{ scale: 2.4, opacity: 0.7 }}
-              animate={{ scale: 0.85, opacity: 0 }}
-              transition={{ duration: 6.5, ease: "easeInOut" }}
-              className="absolute inset-0"
-              style={{
-                background: `
-        radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), transparent 18%),
-        radial-gradient(circle at 80% 55%, rgba(255,255,255,0.65), transparent 25%),
-        radial-gradient(circle at 10% 80%, rgba(255,255,255,0.65), transparent 24%)
-      `,
-                filter: "blur(45px)",
-              }}
-            />
-
-            {/* center cinematic card */}
-            <motion.div
-              initial={{ opacity: 0, y: 30, scale: 0.94 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
+          <div className="relative z-10 flex h-screen w-full flex-col items-center justify-center px-6 text-center text-white">
+            <motion.img
+              src="https://mcusercontent.com/2ead8cf9844eae73676cdedb6/images/5c553236-b34b-a985-35dd-24d9bba8f0a1.png"
+              alt="BridgeAZ"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="relative z-10 w-[92%] max-w-3xl overflow-hidden rounded-4xl bg-black/15 p-7 text-center shadow-[0_35px_120px_rgba(0,0,0,0.22)] backdrop-blur-3xl md:rounded-[2.5rem] md:p-12"
+              className="mb-10 w-40 brightness-0 invert md:w-56"
+            />
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 1, 1, 0] }}
+              transition={{ duration: 1.6, delay: 0.4 }}
+              className="text-xs font-black uppercase tracking-[0.45em] text-white/70 md:text-sm"
             >
-              <motion.img
-                src="https://mcusercontent.com/2ead8cf9844eae73676cdedb6/images/5c553236-b34b-a985-35dd-24d9bba8f0a1.png"
-                alt="BridgeAZ"
-                initial={{ opacity: 0, y: -14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="mx-auto mb-8 w-42.5 brightness-0 invert md:w-55"
-              />
+              Connecting to Bridge
+            </motion.p>
 
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 1, 1, 0] }}
-                transition={{ duration: 1.4, delay: 0.4 }}
-                className="text-sm font-bold uppercase tracking-[0.4em] text-white/75"
-              >
-                Connecting to Bridge
-              </motion.p>
+            <div className="relative mt-10 h-24 w-full max-w-4xl overflow-hidden">
+              {animatedNames.map((name, index) => (
+                <motion.div
+                  key={name}
+                  initial={{ opacity: 0, y: 45, scale: 0.96 }}
+                  animate={{
+                    opacity: index === 3 ? [0, 0, 1] : [0, 1, 0],
+                    y: index === 3 ? [45, 24, 0] : [45, 0, -45],
+                    scale: index === 3 ? [0.96, 0.98, 1] : [0.96, 1, 0.98],
+                  }}
+                  transition={{
+                    delay: 1.8 + index * 1.1,
+                    duration: index === 3 ? 1.8 : 1.1,
+                    ease: "easeInOut",
+                  }}
+                  className="absolute inset-0 flex items-center justify-center text-5xl font-black tracking-tight md:text-7xl"
+                >
+                  {name}
+                </motion.div>
+              ))}
+            </div>
 
-              <motion.div className="mt-8 h-20 overflow-hidden">
-                {animatedNames.map((name, index) => (
-                  <motion.div
-                    key={name}
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{
-                      opacity: index === 3 ? [0, 0, 1] : [0, 1, 0],
-                      y: index === 3 ? [30, 20, 0] : [30, 0, -30],
-                    }}
-                    transition={{
-                      delay: 1.8 + index * 1.1,
-                      duration: index === 3 ? 1.8 : 1.1,
-                    }}
-                    className="absolute inset-0 flex items-center justify-center text-4xl font-black md:text-6xl"
-                  >
-                    {name}
-                  </motion.div>
-                ))}
-              </motion.div>
+            <motion.p
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 2.8 }}
+              className="mt-8 max-w-xl text-base font-medium text-white/80 md:text-lg"
+            >
+              Found your personalized local experience.
+            </motion.p>
 
-              <motion.p
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 2.8 }}
-                className="mt-6 text-lg font-medium text-white/85"
-              >
-                Found your personalized local experience.
-              </motion.p>
-
+            <div className="mt-10 h-1 w-64 overflow-hidden rounded-full bg-white/20">
               <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: "100%" }}
-                transition={{ delay: 0.6, duration: 5, ease: "easeInOut" }}
-                className="mx-auto mt-10 h-1 rounded-full bg-white/80"
+                initial={{ x: "-100%" }}
+                animate={{ x: "120%" }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2.4,
+                  ease: "easeInOut",
+                }}
+                className="h-full w-1/2 rounded-full bg-white"
               />
+            </div>
 
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.75 }}
-                transition={{ delay: 3 }}
-                className="mt-5 text-sm uppercase tracking-[0.28em] text-white/70"
-              >
-                Entering your page
-              </motion.p>
-            </motion.div>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.75 }}
+              transition={{ delay: 3 }}
+              className="mt-6 text-xs font-bold uppercase tracking-[0.35em] text-white"
+            >
+              Entering your page
+            </motion.p>
           </div>
         </motion.div>
       )}
@@ -824,17 +822,26 @@ const animatedNames = getAnimatedNames(profile?.firstName);
                   <motion.div
                     key={chip}
                     initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                      boxShadow: [
+                        `0 8px 22px rgba(7,26,74,0.12), 0 0 0 1px ${profile.theme.secondary}22`,
+                        `0 8px 28px rgba(7,26,74,0.16), 0 0 0 3px ${profile.theme.secondary}55`,
+                        `0 8px 22px rgba(7,26,74,0.12), 0 0 0 1px ${profile.theme.secondary}22`,
+                      ],
+                    }}
                     transition={{
                       delay: 0.4 + index * 0.08,
+                      boxShadow: {
+                        repeat: Infinity,
+                        duration: 2.4,
+                        ease: "easeInOut",
+                      },
                     }}
-                    className="rounded-full px-5 py-3 text-sm font-bold text-white shadow-xl"
+                    className="relative rounded-full border bg-white px-5 py-3 text-sm font-bold text-[#071A4A]"
                     style={{
-                      background: `linear-gradient(
-                  135deg,
-                  ${profile.theme.primary},
-                  ${profile.theme.secondary}
-                )`,
+                      borderColor: `${profile.theme.secondary}66`,
                     }}
                   >
                     {chip}
@@ -845,13 +852,10 @@ const animatedNames = getAnimatedNames(profile?.firstName);
               {/* theme badge */}
               <div className="mt-10">
                 <span
-                  className="rounded-full px-6 py-3 text-sm font-bold text-white shadow-2xl"
+                  className="inline-flex items-center rounded-full px-6 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-xl"
                   style={{
-                    background: `linear-gradient(
-                135deg,
-                ${profile.theme.primary},
-                ${profile.theme.secondary}
-              )`,
+                    backgroundColor: "#071A4A",
+                    boxShadow: `0 12px 32px rgba(7,26,74,0.28), 0 0 0 3px ${profile.theme.secondary}22`,
                   }}
                 >
                   {profile.themeName}
@@ -986,51 +990,69 @@ const animatedNames = getAnimatedNames(profile?.firstName);
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{
-                scale: 1.04,
+                scale: 1.03,
                 y: -2,
               }}
               whileTap={{
                 scale: 0.98,
               }}
-              className="relative mt-8 inline-flex overflow-hidden rounded-full px-8 py-4 text-sm font-black uppercase tracking-[0.22em] text-white shadow-2xl"
+              className="group relative mt-8 inline-flex items-center gap-3 overflow-hidden rounded-full border bg-white px-8 py-4 text-sm font-black uppercase tracking-[0.22em] text-[#071A4A] shadow-xl"
               style={{
-                background: `linear-gradient(
-            135deg,
-            ${profile.theme.primary},
-            ${profile.theme.secondary}
-          )`,
+                borderColor: `${profile.theme.secondary}55`,
+                boxShadow: `
+      0 10px 35px rgba(7,26,74,0.12),
+      0 0 0 1px ${profile.theme.secondary}22
+    `,
               }}
             >
-              <span className="relative z-10 flex items-center gap-3">
-                Explore BridgeAZ →
-                <motion.span
-                  animate={{
-                    x: [0, 4, 0],
-                  }}
-                  transition={{
-                    repeat: Infinity,
-                    duration: 1.5,
-                  }}
-                >
-                  →
-                </motion.span>
-              </span>
-
+              {/* moving glow */}
               <motion.div
                 animate={{
                   x: ["-120%", "120%"],
                 }}
                 transition={{
                   repeat: Infinity,
-                  duration: 3,
+                  duration: 2.8,
                   ease: "linear",
                 }}
-                className="absolute inset-0"
+                className="absolute inset-0 opacity-80"
                 style={{
-                  background:
-                    "linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent)",
+                  background: `linear-gradient(
+        90deg,
+        transparent,
+        ${profile.theme.secondary}55,
+        transparent
+      )`,
                 }}
               />
+
+              {/* top edge glow */}
+              <div
+                className="absolute inset-x-0 top-0 h-[1px]"
+                style={{
+                  background: `linear-gradient(
+        90deg,
+        transparent,
+        ${profile.theme.secondary},
+        transparent
+      )`,
+                }}
+              />
+
+              <span className="relative z-10">Explore BridgeAZ</span>
+
+              <motion.span
+                animate={{
+                  x: [0, 4, 0],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 1.5,
+                }}
+                className="relative z-10"
+              >
+                →
+              </motion.span>
             </motion.a>
           </div>
         </div>

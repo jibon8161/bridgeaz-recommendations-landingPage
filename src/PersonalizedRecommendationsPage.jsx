@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import FloatingScene from "./components/FloatingScene";
+
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation, Pagination } from "swiper/modules";
+
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
 const API_BASE =
   "https://bridgeaz-recommendations-server.vercel.app/api/recommendations";
 
@@ -199,18 +206,14 @@ function ErrorState() {
 function RecommendationCard({ item, theme, index }) {
   return (
     <motion.div
+      whileHover="hover"
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="group relative overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-[0_15px_45px_rgba(7,26,74,0.08)] transition duration-300 hover:-translate-y-2 hover:shadow-[0_25px_60px_rgba(7,26,74,0.16)]"
+      className="relative flex h-full min-h-[520px] flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-[0_15px_45px_rgba(7,26,74,0.08)] transition duration-300 hover:-translate-y-2 hover:shadow-[0_25px_60px_rgba(7,26,74,0.16)]"
     >
       <div
         className="absolute left-0 top-0 h-full w-1.5"
-        style={{ backgroundColor: theme.secondary }}
-      />
-
-      <div
-        className="absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-10 blur-3xl"
         style={{ backgroundColor: theme.secondary }}
       />
 
@@ -233,64 +236,135 @@ function RecommendationCard({ item, theme, index }) {
         {item?.date && <p>📅 {item.date}</p>}
         {item?.location && <p>📍 {item.location}</p>}
       </div>
-
-      {item?.link ? (
-        <a
-          href={item.link}
-          target="_blank"
-          rel="noreferrer"
-          className="relative mt-7 inline-flex items-center gap-2 overflow-hidden rounded-full border bg-white px-5 py-3 text-sm font-black text-[#071A4A] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03]"
+      <div className="mt-auto pt-6">
+        <div
+          className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white"
           style={{
-            borderColor: `${theme.secondary}66`,
-            boxShadow: `
-      0 8px 22px rgba(7,26,74,0.12),
-      0 0 0 1px ${theme.secondary}22
-    `,
+            backgroundColor: theme.primary,
           }}
         >
-          {/* animated glow */}
-          <motion.div
-            animate={{
-              x: ["-120%", "120%"],
-            }}
-            transition={{
-              repeat: Infinity,
-              duration: 2.6,
-              ease: "linear",
-            }}
-            className="absolute inset-0 opacity-80"
-            style={{
-              background: `linear-gradient(
+          <span>Explore</span>
+          <span>→</span>
+        </div>
+      </div>
+      <motion.div
+        variants={{
+          hover: { opacity: 1 },
+        }}
+        initial={{ opacity: 0 }}
+        className="pointer-events-none absolute inset-0 z-50 overflow-hidden"
+      >
+        <motion.div
+          variants={{
+            hover: {
+              opacity: 1,
+              scale: 1,
+            },
+          }}
+          initial={{
+            opacity: 0,
+            scale: 1.08,
+          }}
+          transition={{
+            duration: 0.45,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+          className="absolute inset-0"
+          style={{
+            background: `
+      radial-gradient(
+        circle at top left,
+        ${theme.secondary}22,
+        transparent 35%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(7,26,74,0.72),
+        rgba(7,26,74,0.45)
+      )
+    `,
+          }}
+        />
+        <motion.div
+          animate={{ rotate: [0, 360] }}
+          transition={{
+            repeat: Infinity,
+            duration: 12,
+            ease: "linear",
+          }}
+          className="absolute -left-20 -top-20 h-56 w-56 rounded-full blur-3xl"
+          style={{ background: `${theme.secondary}66` }}
+        />
+
+        <div className="relative z-10 flex h-full items-center justify-center">
+          {item?.link ? (
+            <motion.a
+              href={item.link}
+              target="_blank"
+              rel="noreferrer"
+              animate={{
+                boxShadow: [
+                  `0 4px 14px rgba(7,26,74,0.10), 0 0 0 1px ${theme.secondary}22`,
+                  `0 6px 20px rgba(7,26,74,0.14), 0 0 0 2px ${theme.secondary}55`,
+                  `0 4px 14px rgba(7,26,74,0.10), 0 0 0 1px ${theme.secondary}22`,
+                ],
+              }}
+              transition={{
+                boxShadow: {
+                  repeat: Infinity,
+                  duration: 2.2,
+                  ease: "easeInOut",
+                },
+              }}
+              className="pointer-events-auto relative inline-flex items-center gap-2 overflow-hidden rounded-full border bg-white px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-[#071A4A] transition-all duration-300 hover:scale-105"
+              style={{
+                borderColor: `${theme.secondary}55`,
+              }}
+            >
+              {/* moving premium glow */}
+              <motion.div
+                animate={{
+                  x: ["-120%", "120%"],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2.8,
+                  ease: "linear",
+                }}
+                className="pointer-events-none absolute inset-0 opacity-70"
+                style={{
+                  background: `linear-gradient(
         90deg,
         transparent,
-        ${theme.secondary}55,
+        ${theme.secondary}44,
         transparent
       )`,
-            }}
-          />
+                }}
+              />
 
-          {/* top edge light */}
-          <div
-            className="absolute inset-x-0 top-0 h-[1px]"
-            style={{
-              background: `linear-gradient(
+              {/* subtle top edge */}
+              <div
+                className="absolute inset-x-0 top-0 h-px"
+                style={{
+                  background: `linear-gradient(
         90deg,
         transparent,
         ${theme.secondary},
         transparent
       )`,
-            }}
-          />
+                }}
+              />
 
-          <span className="relative z-10">View Details</span>
-
-          <span className="relative z-10">→</span>
-        </a>
-      ) : (
-        <p className="mt-7 text-sm font-semibold text-[#0B3694]">
-          Learn more locally
-        </p>
-      )}
+              <span className="relative z-10">Explore</span>
+              <span className="relative z-10">→</span>
+            </motion.a>
+          ) : (
+            <div className="rounded-full border border-white/40 bg-white/90 px-7 py-3 text-sm font-black text-[#071A4A] shadow-[0_10px_40px_rgba(255,255,255,0.25)] backdrop-blur-xl">
+              Learn More
+            </div>
+          )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -364,6 +438,8 @@ export default function PersonalizedRecommendationsPage() {
   const [loading, setLoading] = useState(true);
   const [rawData, setRawData] = useState(null);
   const [showIntro, setShowIntro] = useState(true);
+  const [showAllFuture, setShowAllFuture] = useState(false);
+  const [selectedDate, setSelectedDate] = useState("all");
 
 
 
@@ -449,6 +525,27 @@ const animatedNames = getAnimatedNames(profile?.firstName);
 
   if (!profile) return <ErrorState />;
 
+const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
+
+  const allFutureItems = rawData?.recommendations?.allFutureItems || [];
+  
+  const selectedBaseItems = showAllFuture ? allFutureItems : next14DaysItems;
+
+  const dateOptions = [
+    ...new Set(
+      selectedBaseItems
+        .map((item) => item.rawDate?.slice(0, 10))
+        .filter(Boolean),
+    ),
+  ];
+
+  const filteredItems =
+    selectedDate === "all"
+      ? selectedBaseItems
+      : selectedBaseItems.filter(
+          (item) => item.rawDate?.slice(0, 10) === selectedDate,
+        );
+
   // const introSteps = [
   //   "Reading your interests",
   //   "Matching local events",
@@ -473,7 +570,7 @@ const animatedNames = getAnimatedNames(profile?.firstName);
         <motion.div
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[9999] overflow-hidden"
+          className="fixed inset-0 z-9999 overflow-hidden"
           style={{
             background: `linear-gradient(135deg, #071A4A 0%, ${profile.theme.primary} 45%, ${profile.theme.secondary} 100%)`,
           }}
@@ -481,7 +578,7 @@ const animatedNames = getAnimatedNames(profile?.firstName);
           <motion.div
             animate={{ scale: [1, 1.15, 1], opacity: [0.25, 0.5, 0.25] }}
             transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
-            className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20 blur-3xl"
+            className="absolute left-1/2 top-1/2 h-130 w-130 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20 blur-3xl"
           />
 
           <div className="relative z-10 flex h-screen w-full flex-col items-center justify-center px-6 text-center text-white">
@@ -881,18 +978,96 @@ const animatedNames = getAnimatedNames(profile?.firstName);
               Local events, resources, and opportunities based on your
               interests.
             </p>
+            <p className="mt-2 text-sm font-bold text-[#071A4A]">
+              Showing{" "}
+              {(showAllFuture ? allFutureItems : next14DaysItems).length} events
+            </p>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            {profile.items.map((item, index) => (
-              <RecommendationCard
-                key={index}
-                item={item}
-                theme={profile.theme}
-                index={index}
-              />
-            ))}
+          <div className="relative px-14 pb-16">
+            <div className="mb-8 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedDate("all")}
+                className="rounded-full border bg-white px-5 py-2.5 text-sm font-bold transition hover:scale-105"
+                style={{
+                  borderColor:
+                    selectedDate === "all"
+                      ? profile.theme.secondary
+                      : "#E5E7EB",
+                  color: profile.theme.primary,
+                  boxShadow:
+                    selectedDate === "all"
+                      ? `0 0 0 3px ${profile.theme.secondary}33`
+                      : "none",
+                }}
+              >
+                All Dates
+              </button>
+
+              {dateOptions.map((date) => (
+                <button
+                  key={date}
+                  type="button"
+                  onClick={() => setSelectedDate(date)}
+                  className="rounded-full border bg-white px-5 py-2.5 text-sm font-bold transition hover:scale-105"
+                  style={{
+                    borderColor:
+                      selectedDate === date
+                        ? profile.theme.secondary
+                        : "#E5E7EB",
+                    color: profile.theme.primary,
+                    boxShadow:
+                      selectedDate === date
+                        ? `0 0 0 3px ${profile.theme.secondary}33`
+                        : "none",
+                  }}
+                >
+                  {new Date(date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </button>
+              ))}
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination]}
+              spaceBetween={24}
+              navigation
+              pagination={{ clickable: true }}
+              className="!static"
+              breakpoints={{
+                0: { slidesPerView: 1 },
+                768: { slidesPerView: 2 },
+                1280: { slidesPerView: 3 },
+              }}
+            >
+              {filteredItems.map((item, index) => (
+                <SwiperSlide key={index} className="h-auto!">
+                  <RecommendationCard
+                    item={item}
+                    theme={profile.theme}
+                    index={index}
+                  />
+                </SwiperSlide>
+              ))}
+            </Swiper>
           </div>
+
+          {allFutureItems.length > next14DaysItems.length && (
+            <div className="mt-10 text-center">
+              <button
+                type="button"
+                onClick={() => setShowAllFuture((prev) => !prev)}
+                className="rounded-full px-6 py-3 text-sm font-black text-white shadow-xl transition hover:scale-105"
+                style={{ backgroundColor: profile.theme.primary }}
+              >
+                {showAllFuture
+                  ? "Show Next 14 Days Only"
+                  : "See All Future Events"}
+              </button>
+            </div>
+          )}
         </div>
       </section>
       {/* floating AI delight */}

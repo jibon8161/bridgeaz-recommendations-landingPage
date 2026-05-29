@@ -236,16 +236,21 @@ function RecommendationCard({ item, theme, index }) {
         {item?.date && <p>📅 {item.date}</p>}
         {item?.location && <p>📍 {item.location}</p>}
       </div>
-      <div className="mt-auto pt-6">
-        <div
-          className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white"
-          style={{
-            backgroundColor: theme.primary,
-          }}
-        >
-          <span>Explore</span>
-          <span>→</span>
-        </div>
+      <div className="mt-auto pt-6 md:hidden">
+        {item?.link && (
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white"
+            style={{
+              backgroundColor: theme.primary,
+            }}
+          >
+            <span>Explore</span>
+            <span>→</span>
+          </a>
+        )}
       </div>
       <motion.div
         variants={{
@@ -360,7 +365,7 @@ function RecommendationCard({ item, theme, index }) {
             </motion.a>
           ) : (
             <div className="rounded-full border border-white/40 bg-white/90 px-7 py-3 text-sm font-black text-[#071A4A] shadow-[0_10px_40px_rgba(255,255,255,0.25)] backdrop-blur-xl">
-              Learn More
+              Details Coming Soon
             </div>
           )}
         </div>
@@ -440,10 +445,7 @@ export default function PersonalizedRecommendationsPage() {
   const [showIntro, setShowIntro] = useState(true);
   const [showAllFuture, setShowAllFuture] = useState(false);
   const [selectedDate, setSelectedDate] = useState("all");
-
-
-
- 
+  const [activeSection, setActiveSection] = useState("events");
 
   useEffect(() => {
     let active = true;
@@ -500,11 +502,7 @@ export default function PersonalizedRecommendationsPage() {
     return normalizeData(rawData);
   }, [rawData]);
 
-const animatedNames = getAnimatedNames(profile?.firstName);
-
-
-
-  
+  const animatedNames = getAnimatedNames(profile?.firstName);
 
   useEffect(() => {
     if (!profile) return;
@@ -525,10 +523,10 @@ const animatedNames = getAnimatedNames(profile?.firstName);
 
   if (!profile) return <ErrorState />;
 
-const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
+  const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
 
   const allFutureItems = rawData?.recommendations?.allFutureItems || [];
-  
+
   const selectedBaseItems = showAllFuture ? allFutureItems : next14DaysItems;
 
   const dateOptions = [
@@ -546,14 +544,23 @@ const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
           (item) => item.rawDate?.slice(0, 10) === selectedDate,
         );
 
+  const selectedForYouItems = filteredItems.filter((item) => {
+    return item.type?.toLowerCase().trim() === "event";
+  });
+
+  const communityHubItems = filteredItems.filter((item) => {
+    return item.type?.toLowerCase().trim() === "submission";
+  });
+
+  const activeItems =
+    activeSection === "events" ? selectedForYouItems : communityHubItems;
+
   // const introSteps = [
   //   "Reading your interests",
   //   "Matching local events",
   //   "Selecting resources",
   //   "Designing your personal theme",
   // ];
-
-  
 
   return (
     <main
@@ -974,13 +981,47 @@ const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
               Selected For You
             </h2>
 
+            <div className="mt-6 inline-flex rounded-full border bg-white p-1 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setActiveSection("events")}
+                className="rounded-full px-5 py-2.5 text-sm font-black transition"
+                style={{
+                  backgroundColor:
+                    activeSection === "events"
+                      ? profile.theme.primary
+                      : "transparent",
+                  color:
+                    activeSection === "events" ? "#fff" : profile.theme.primary,
+                }}
+              >
+                Activities
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveSection("hub")}
+                className="rounded-full px-5 py-2.5 text-sm font-black transition"
+                style={{
+                  backgroundColor:
+                    activeSection === "hub"
+                      ? profile.theme.primary
+                      : "transparent",
+                  color:
+                    activeSection === "hub" ? "#fff" : profile.theme.primary,
+                }}
+              >
+                Community Hub
+              </button>
+            </div>
+
             <p className="mt-3 max-w-2xl text-gray-600">
               Local events, resources, and opportunities based on your
               interests.
             </p>
             <p className="mt-2 text-sm font-bold text-[#071A4A]">
-              Showing{" "}
-              {(showAllFuture ? allFutureItems : next14DaysItems).length} events
+              Showing {activeItems.length}{" "}
+              {activeSection === "events" ? "activities" : "submissions"}
             </p>
           </div>
 
@@ -1030,6 +1071,7 @@ const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
                 </button>
               ))}
             </div>
+
             <Swiper
               modules={[Navigation, Pagination]}
               spaceBetween={24}
@@ -1042,7 +1084,7 @@ const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
                 1280: { slidesPerView: 3 },
               }}
             >
-              {filteredItems.map((item, index) => (
+              {activeItems.map((item, index) => (
                 <SwiperSlide key={index} className="h-auto!">
                   <RecommendationCard
                     item={item}

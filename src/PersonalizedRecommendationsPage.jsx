@@ -1,3 +1,4 @@
+// import { formatInTimeZone } from "date-fns-tz";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -210,7 +211,7 @@ function RecommendationCard({ item, theme, index }) {
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="relative flex h-full min-h-[520px] flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-[0_15px_45px_rgba(7,26,74,0.08)] transition duration-300 hover:-translate-y-2 hover:shadow-[0_25px_60px_rgba(7,26,74,0.16)]"
+      className="relative flex h-full min-h-130 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-[0_15px_45px_rgba(7,26,74,0.08)] transition duration-300 hover:-translate-y-2 hover:shadow-[0_25px_60px_rgba(7,26,74,0.16)]"
     >
       <div
         className="absolute left-0 top-0 h-full w-1.5"
@@ -443,9 +444,10 @@ export default function PersonalizedRecommendationsPage() {
   const [loading, setLoading] = useState(true);
   const [rawData, setRawData] = useState(null);
   const [showIntro, setShowIntro] = useState(true);
-  const [showAllFuture, setShowAllFuture] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("all");
+ const [showAllFuture, setShowAllFuture] = useState(true);
+  const [daysFilter, setDaysFilter] = useState(14);
   const [activeSection, setActiveSection] = useState("events");
+  const [communityFilter, setCommunityFilter] = useState("all");
 
   useEffect(() => {
     let active = true;
@@ -466,7 +468,7 @@ export default function PersonalizedRecommendationsPage() {
         const response = await fetch(`${API_BASE}/${token}`);
         const text = await response.text();
 
-        console.log("RAW API:", text);
+    
 
         if (!active) return;
 
@@ -517,7 +519,7 @@ export default function PersonalizedRecommendationsPage() {
   //   const moodMotion =
   //     moodMotionMap[profile?.theme?.mood || "professional"] ||
   //     moodMotionMap.professional;
-  console.log("ACTIVE THEME:", profile?.theme);
+
 
   if (loading) return <LoadingScreen />;
 
@@ -529,31 +531,72 @@ export default function PersonalizedRecommendationsPage() {
 
   const selectedBaseItems = showAllFuture ? allFutureItems : next14DaysItems;
 
-  const dateOptions = [
-    ...new Set(
-      selectedBaseItems
-        .map((item) => item.rawDate?.slice(0, 10))
-        .filter(Boolean),
-    ),
-  ];
+const todayBase = new Date();
 
-  const filteredItems =
-    selectedDate === "all"
-      ? selectedBaseItems
-      : selectedBaseItems.filter(
-          (item) => item.rawDate?.slice(0, 10) === selectedDate,
-        );
+const getUTCDateOnly = (dateValue) => {
+  const date = new Date(dateValue);
+  return date.toISOString().slice(0, 10);
+};
+
+const todayUTC = getUTCDateOnly(todayBase);
+
+const endDate = new Date(todayBase);
+endDate.setDate(endDate.getDate() + daysFilter);
+
+const endUTC = getUTCDateOnly(endDate);
+
+const filteredItems = selectedBaseItems.filter((item) => {
+  if (showAllFuture) return true;
+  if (!item.rawDate) return false;
+
+  const itemUTC = getUTCDateOnly(item.rawDate);
+
+  return itemUTC >= todayUTC && itemUTC <= endUTC;
+});
+
+
+
 
   const selectedForYouItems = filteredItems.filter((item) => {
     return item.type?.toLowerCase().trim() === "event";
   });
 
-  const communityHubItems = filteredItems.filter((item) => {
+  
+const communityBaseItems =
+  activeSection === "hub" &&
+  communityFilter !== "all" &&
+  communityFilter !== "An activity, event, class, or opportunity"
+    ? allFutureItems
+    : filteredItems;
+
+const allCommunityItems = communityBaseItems.filter((item) => {
+  return item.type?.toLowerCase().trim() === "submission";
+});
+  
+  const allFutureCommunityItems = allFutureItems.filter((item) => {
     return item.type?.toLowerCase().trim() === "submission";
   });
 
-  const activeItems =
+const communityCategories = [
+  // "all",
+  "An activity, event, class, or opportunity",
+  "A resource, article, tip, or link",
+  "A helpful Document, template, or guide",
+];
+
+const communityHubItems = allCommunityItems.filter((item) => {
+  if (communityFilter === "all") return true;
+
+  return item.submissionType?.toLowerCase() === communityFilter.toLowerCase();
+});
+
+const activeItems =
     activeSection === "events" ? selectedForYouItems : communityHubItems;
+  
+  const shouldShowDateFilter =
+    activeSection === "events" ||
+    (activeSection === "hub" &&
+      communityFilter === "An activity, event, class, or opportunity");
 
   // const introSteps = [
   //   "Reading your interests",
@@ -1015,6 +1058,63 @@ export default function PersonalizedRecommendationsPage() {
               </button>
             </div>
 
+            {activeSection === "hub" && (
+              <div className="mt-6 flex flex-wrap gap-3">
+                {communityCategories.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setCommunityFilter(type)}
+                    className="rounded-full border px-4 py-2 text-sm font-bold transition hover:scale-105"
+                    style={{
+                      backgroundColor:
+                        communityFilter === type
+                          ? profile.theme.primary
+                          : "#fff",
+                      color:
+                        communityFilter === type
+                          ? "#fff"
+                          : profile.theme.primary,
+                      borderColor:
+                        communityFilter === type
+                          ? profile.theme.primary
+                          : "#E5E7EB",
+                      boxShadow:
+                        communityFilter === type
+                          ? `0 0 0 3px ${profile.theme.primary}33`
+                          : "none",
+                    }}
+                  >
+                    {type === "all"
+                      ? `All (${allCommunityItems.length})`
+                      : type === "An activity, event, class, or opportunity"
+                        ? `Activities (${
+                            allCommunityItems.filter(
+                              (item) =>
+                                item.submissionType ===
+                                "An activity, event, class, or opportunity",
+                            ).length
+                          })`
+                        : type === "A resource, article, tip, or link"
+                          ? `Resources (${
+                              allFutureCommunityItems.filter(
+                                (item) =>
+                                  item.submissionType ===
+                                  "A resource, article, tip, or link",
+                              ).length
+                            })`
+                          : `Documents (${
+                              allFutureCommunityItems.filter(
+                                (item) =>
+                                  item.submissionType ===
+                                  "A helpful Document, template, or guide",
+                              ).length
+                            })`}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <p className="mt-3 max-w-2xl text-gray-600">
               Local events, resources, and opportunities based on your
               interests.
@@ -1026,58 +1126,87 @@ export default function PersonalizedRecommendationsPage() {
           </div>
 
           <div className="relative px-14 pb-16">
-            <div className="mb-8 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedDate("all")}
-                className="rounded-full border bg-white px-5 py-2.5 text-sm font-bold transition hover:scale-105"
-                style={{
-                  borderColor:
-                    selectedDate === "all"
-                      ? profile.theme.secondary
-                      : "#E5E7EB",
-                  color: profile.theme.primary,
-                  boxShadow:
-                    selectedDate === "all"
-                      ? `0 0 0 3px ${profile.theme.secondary}33`
-                      : "none",
-                }}
-              >
-                All Dates
-              </button>
+            {shouldShowDateFilter && (
+              <div className="mb-8">
+                {/* Mobile dropdown */}
+                <div className="md:hidden">
+                  <label className="mb-2 block text-sm font-black text-[#071A4A]">
+                    Time Range
+                  </label>
 
-              {dateOptions.map((date) => (
-                <button
-                  key={date}
-                  type="button"
-                  onClick={() => setSelectedDate(date)}
-                  className="rounded-full border bg-white px-5 py-2.5 text-sm font-bold transition hover:scale-105"
-                  style={{
-                    borderColor:
-                      selectedDate === date
-                        ? profile.theme.secondary
-                        : "#E5E7EB",
-                    color: profile.theme.primary,
-                    boxShadow:
-                      selectedDate === date
-                        ? `0 0 0 3px ${profile.theme.secondary}33`
-                        : "none",
-                  }}
-                >
-                  {new Date(date).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </button>
-              ))}
-            </div>
+                  <select
+                    value={showAllFuture ? "all" : daysFilter}
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (value === "all") {
+                        setShowAllFuture(true);
+                      } else {
+                        setShowAllFuture(false);
+                        setDaysFilter(Number(value));
+                      }
+                    }}
+                    className="w-full rounded-2xl border bg-white px-4 py-3 text-sm font-bold shadow-lg"
+                    style={{
+                      color: profile.theme.primary,
+                      borderColor: `${profile.theme.primary}33`,
+                    }}
+                  >
+                    <option value={3}>3 Days</option>
+                    <option value={7}>7 Days</option>
+                    <option value={14}>14 Days</option>
+                    <option value="all">All Future</option>
+                  </select>
+                </div>
+
+                {/* Desktop pills */}
+                <div className="hidden md:flex">
+                  <div className="inline-flex rounded-full border bg-white p-1 shadow-lg">
+                    {[
+                      { value: 3, label: "3 Days" },
+                      { value: 7, label: "7 Days" },
+                      { value: 14, label: "14 Days" },
+                      { value: "all", label: "All Future" },
+                    ].map((option) => {
+                      const isActive =
+                        (option.value === "all" && showAllFuture) ||
+                        (!showAllFuture && daysFilter === option.value);
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            if (option.value === "all") {
+                              setShowAllFuture(true);
+                            } else {
+                              setShowAllFuture(false);
+                              setDaysFilter(option.value);
+                            }
+                          }}
+                          className="rounded-full px-5 py-2.5 text-sm font-black transition"
+                          style={{
+                            backgroundColor: isActive
+                              ? profile.theme.primary
+                              : "transparent",
+                            color: isActive ? "#fff" : profile.theme.primary,
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <Swiper
               modules={[Navigation, Pagination]}
               spaceBetween={24}
               navigation
               pagination={{ clickable: true }}
-              className="!static"
+              className="static!"
               breakpoints={{
                 0: { slidesPerView: 1 },
                 768: { slidesPerView: 2 },
@@ -1095,21 +1224,6 @@ export default function PersonalizedRecommendationsPage() {
               ))}
             </Swiper>
           </div>
-
-          {allFutureItems.length > next14DaysItems.length && (
-            <div className="mt-10 text-center">
-              <button
-                type="button"
-                onClick={() => setShowAllFuture((prev) => !prev)}
-                className="rounded-full px-6 py-3 text-sm font-black text-white shadow-xl transition hover:scale-105"
-                style={{ backgroundColor: profile.theme.primary }}
-              >
-                {showAllFuture
-                  ? "Show Next 14 Days Only"
-                  : "See All Future Events"}
-              </button>
-            </div>
-          )}
         </div>
       </section>
       {/* floating AI delight */}
@@ -1245,7 +1359,7 @@ export default function PersonalizedRecommendationsPage() {
 
               {/* top edge glow */}
               <div
-                className="absolute inset-x-0 top-0 h-[1px]"
+                className="absolute inset-x-0 top-0 h-px"
                 style={{
                   background: `linear-gradient(
         90deg,

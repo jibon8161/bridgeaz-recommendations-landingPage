@@ -1447,7 +1447,7 @@ export default function PersonalizedRecommendationsPage() {
               </div>
 
               <h2
-                className="max-w-xl text-4xl font-black leading-tight md:text-5xl"
+                className="max-w-xl text-2xl font-black leading-tight "
                 style={{ color: profile.theme.primary }}
               >
                 Know Someone Who Would Love BridgeAZ?

@@ -1422,118 +1422,174 @@ export default function PersonalizedRecommendationsPage() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
-          className="mx-auto max-w-5xl overflow-hidden rounded-[36px] border border-white/40 bg-white/75 p-1 shadow-[0_35px_100px_rgba(15,23,42,0.12)] backdrop-blur-2xl"
+          className="mx-auto max-w-6xl overflow-hidden rounded-[36px] border border-white/50 bg-white/75 shadow-[0_35px_100px_rgba(15,23,42,0.12)] backdrop-blur-2xl"
         >
           <div
-            className="relative overflow-hidden rounded-4xl p-8 md:p-12"
+            className="relative grid gap-0 overflow-hidden md:grid-cols-2"
             style={{
               background: `
-          radial-gradient(circle at top left, ${profile.theme.secondary}24, transparent 34%),
-          linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,255,255,0.72))
+          radial-gradient(circle at 15% 20%, ${profile.theme.secondary}22, transparent 34%),
+          radial-gradient(circle at 85% 80%, ${profile.theme.primary}20, transparent 36%),
+          linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,255,255,0.74))
         `,
             }}
           >
-            <motion.div
-              animate={{ x: ["-30%", "130%"] }}
-              transition={{
-                repeat: Infinity,
-                duration: 8,
-                ease: "easeInOut",
-              }}
-              className="absolute top-0 h-full w-60 rotate-12"
-              style={{
-                background: `linear-gradient(90deg, transparent, ${profile.theme.secondary}22, transparent)`,
-                filter: "blur(24px)",
-              }}
-            />
-
-            <div className="relative z-10 grid gap-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-              <div>
-                <div
-                  className="mb-5 inline-flex rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.22em]"
-                  style={{
-                    color: profile.theme.primary,
-                    backgroundColor: `${profile.theme.secondary}22`,
-                  }}
-                >
-                  Grow the BridgeAZ circle
-                </div>
-
-                <h2
-                  className="text-4xl font-black leading-tight md:text-5xl"
-                  style={{ color: profile.theme.primary }}
-                >
-                  {rawData.firstName}, know someone who would love BridgeAZ?
-                </h2>
-
-                <p className="mt-4 max-w-xl text-base leading-7 text-slate-600 md:text-lg">
-                  Help someone discover local events, resources, and
-                  opportunities tailored to their interests.
-                </p>
-
-                <div className="mt-6 flex flex-wrap gap-3">
-                  {[
-                    "Local events",
-                    "Community resources",
-                    "Personalized picks",
-                  ].map((label) => (
-                    <span
-                      key={label}
-                      className="rounded-full border bg-white px-4 py-2 text-xs font-bold text-[#071A4A] shadow-sm"
-                      style={{ borderColor: `${profile.theme.secondary}55` }}
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
+            {/* LEFT CONTENT */}
+            <div className="relative overflow-hidden p-8 md:p-12">
+              <div
+                className="mb-6 inline-flex rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.22em]"
+                style={{
+                  color: profile.theme.primary,
+                  backgroundColor: `${profile.theme.secondary}22`,
+                }}
+              >
+                Grow the BridgeAZ circle
               </div>
 
+              <h2
+                className="max-w-xl text-4xl font-black leading-tight md:text-5xl"
+                style={{ color: profile.theme.primary }}
+              >
+                Know Someone Who Would Love BridgeAZ?
+              </h2>
+
+              <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 md:text-lg">
+                Invite a friend, neighbor, or colleague to discover local
+                events, helpful resources, and opportunities tailored to their
+                interests.
+              </p>
+
+              {/* CLEAN CONNECTION VISUAL */}
+              <div className="relative mt-8 h-48 overflow-hidden rounded-3xl border border-white/60 bg-white/55">
+                <svg
+                  className="absolute inset-0 h-full w-full"
+                  viewBox="0 0 520 220"
+                  fill="none"
+                >
+                  <motion.path
+                    d="M60 150 C150 40, 250 185, 340 75 S450 120, 485 55"
+                    stroke={profile.theme.primary}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray="10 14"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: [0.25, 1, 0.25] }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 5,
+                      ease: "easeInOut",
+                    }}
+                    opacity="0.7"
+                  />
+
+                  {[
+                    { x: 60, y: 150 },
+                    { x: 175, y: 78 },
+                    { x: 285, y: 150 },
+                    { x: 390, y: 78 },
+                    { x: 485, y: 55 },
+                  ].map((node, index) => (
+                    <motion.g
+                      key={index}
+                      animate={{ scale: [1, 1.14, 1] }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 2.4,
+                        delay: index * 0.22,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <circle
+                        cx={node.x}
+                        cy={node.y}
+                        r="15"
+                        fill="white"
+                        stroke={profile.theme.primary}
+                        strokeWidth="3"
+                      />
+                      <circle
+                        cx={node.x}
+                        cy={node.y}
+                        r="6"
+                        fill={profile.theme.secondary}
+                      />
+                    </motion.g>
+                  ))}
+                </svg>
+
+                <motion.div
+                  animate={{ x: ["-30%", "120%"] }}
+                  transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
+                  className="absolute top-0 h-full w-32 rotate-12"
+                  style={{
+                    background: `linear-gradient(90deg, transparent, ${profile.theme.secondary}33, transparent)`,
+                    filter: "blur(22px)",
+                  }}
+                />
+
+                <div className="absolute bottom-0 left-5 right-5">
+                  <p
+                    className="text-sm font-black uppercase tracking-[0.18em]"
+                    style={{ color: profile.theme.primary }}
+                  >
+                    One invite can open a new local connection.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT FORM */}
+            <div className="relative flex items-center p-8 md:p-12">
               <form
                 onSubmit={handleInviteFriend}
-                className="relative rounded-3xl border border-white/60 bg-white/85 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+                className="w-full rounded-[30px] border border-white/70 bg-white/90 p-6 shadow-[0_25px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl md:p-8"
               >
-                <label className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">
+                <p
+                  className="text-sm font-black uppercase tracking-[0.22em]"
+                  style={{ color: profile.theme.secondary }}
+                >
+                  Invite Your Friends
+                </p>
+
+                <h3
+                  className="mt-3 text-3xl font-black"
+                  style={{ color: profile.theme.primary }}
+                >
+                  Send a personal invite
+                </h3>
+
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  Enter their email and we’ll send them a simple invitation to
+                  join BridgeAZ.
+                </p>
+
+                <label className="mt-6 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Friend Email
                 </label>
 
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                  <input
-                    type="email"
-                    value={friendEmail}
-                    onChange={(e) => setFriendEmail(e.target.value)}
-                    placeholder="friend@example.com"
-                    className="min-w-0 flex-1 rounded-2xl border bg-white px-4 py-3 text-sm font-semibold text-[#071A4A] outline-none transition focus:scale-[1.01]"
-                    style={{
-                      borderColor: `${profile.theme.primary}22`,
-                      boxShadow: `0 0 0 3px ${profile.theme.primary}08`,
-                    }}
-                    required
-                  />
+                <input
+                  type="email"
+                  value={friendEmail}
+                  onChange={(e) => setFriendEmail(e.target.value)}
+                  placeholder="friend@example.com"
+                  className="mt-3 w-full rounded-2xl border bg-white px-4 py-4 text-sm font-semibold text-[#071A4A] outline-none transition focus:scale-[1.01]"
+                  style={{
+                    borderColor: `${profile.theme.primary}22`,
+                    boxShadow: `0 0 0 3px ${profile.theme.primary}08`,
+                  }}
+                  required
+                />
 
-                  <button
-                    type="submit"
-                    className="relative overflow-hidden rounded-2xl px-6 py-3 text-sm font-black text-white shadow-xl transition hover:-translate-y-0.5 hover:scale-[1.02]"
-                    style={{
-                      backgroundColor: profile.theme.primary,
-                      boxShadow: `0 16px 36px ${profile.theme.primary}33`,
-                    }}
-                  >
-                    <motion.span
-                      className="absolute inset-0 opacity-60"
-                      animate={{ x: ["-120%", "120%"] }}
-                      transition={{
-                        repeat: Infinity,
-                        duration: 2.8,
-                        ease: "linear",
-                      }}
-                      style={{
-                        background: `linear-gradient(90deg, transparent, ${profile.theme.secondary}77, transparent)`,
-                      }}
-                    />
-
-                    <span className="relative z-10">Send Invite</span>
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="mt-5 w-full rounded-2xl px-6 py-4 text-sm font-black text-white shadow-xl transition hover:-translate-y-0.5 hover:scale-[1.01]"
+                  style={{
+                    backgroundColor: profile.theme.primary,
+                    boxShadow: `0 16px 36px ${profile.theme.primary}33`,
+                  }}
+                >
+                  Send Invite
+                </button>
 
                 {inviteStatus && (
                   <p
@@ -1548,7 +1604,7 @@ export default function PersonalizedRecommendationsPage() {
                 )}
 
                 <p className="mt-4 text-xs leading-5 text-slate-500">
-                  We’ll only use this email to send your BridgeAZ invitation.
+                  Help Build a Better Connected Community
                 </p>
               </form>
             </div>

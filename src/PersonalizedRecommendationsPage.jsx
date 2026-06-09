@@ -444,10 +444,12 @@ export default function PersonalizedRecommendationsPage() {
   const [loading, setLoading] = useState(true);
   const [rawData, setRawData] = useState(null);
   const [showIntro, setShowIntro] = useState(true);
- const [showAllFuture, setShowAllFuture] = useState(true);
+  const [showAllFuture, setShowAllFuture] = useState(true);
   const [daysFilter, setDaysFilter] = useState(14);
   const [activeSection, setActiveSection] = useState("events");
   const [communityFilter, setCommunityFilter] = useState("all");
+  const [friendEmail, setFriendEmail] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -467,8 +469,6 @@ export default function PersonalizedRecommendationsPage() {
 
         const response = await fetch(`${API_BASE}/${token}`);
         const text = await response.text();
-
-    
 
         if (!active) return;
 
@@ -520,7 +520,6 @@ export default function PersonalizedRecommendationsPage() {
   //     moodMotionMap[profile?.theme?.mood || "professional"] ||
   //     moodMotionMap.professional;
 
-
   if (loading) return <LoadingScreen />;
 
   if (!profile) return <ErrorState />;
@@ -531,72 +530,100 @@ export default function PersonalizedRecommendationsPage() {
 
   const selectedBaseItems = showAllFuture ? allFutureItems : next14DaysItems;
 
-const todayBase = new Date();
+  const todayBase = new Date();
 
-const getUTCDateOnly = (dateValue) => {
-  const date = new Date(dateValue);
-  return date.toISOString().slice(0, 10);
-};
+  const getUTCDateOnly = (dateValue) => {
+    const date = new Date(dateValue);
+    return date.toISOString().slice(0, 10);
+  };
 
-const todayUTC = getUTCDateOnly(todayBase);
+  const todayUTC = getUTCDateOnly(todayBase);
 
-const endDate = new Date(todayBase);
-endDate.setDate(endDate.getDate() + daysFilter);
+  const endDate = new Date(todayBase);
+  endDate.setDate(endDate.getDate() + daysFilter);
 
-const endUTC = getUTCDateOnly(endDate);
+  const endUTC = getUTCDateOnly(endDate);
 
-const filteredItems = selectedBaseItems.filter((item) => {
-  if (showAllFuture) return true;
-  if (!item.rawDate) return false;
+  const filteredItems = selectedBaseItems.filter((item) => {
+    if (showAllFuture) return true;
+    if (!item.rawDate) return false;
 
-  const itemUTC = getUTCDateOnly(item.rawDate);
+    const itemUTC = getUTCDateOnly(item.rawDate);
 
-  return itemUTC >= todayUTC && itemUTC <= endUTC;
-});
-
-
-
+    return itemUTC >= todayUTC && itemUTC <= endUTC;
+  });
 
   const selectedForYouItems = filteredItems.filter((item) => {
     return item.type?.toLowerCase().trim() === "event";
   });
 
-  
-const communityBaseItems =
-  activeSection === "hub" &&
-  communityFilter !== "all" &&
-  communityFilter !== "An activity, event, class, or opportunity"
-    ? allFutureItems
-    : filteredItems;
+  const communityBaseItems =
+    activeSection === "hub" &&
+    communityFilter !== "all" &&
+    communityFilter !== "An activity, event, class, or opportunity"
+      ? allFutureItems
+      : filteredItems;
 
-const allCommunityItems = communityBaseItems.filter((item) => {
-  return item.type?.toLowerCase().trim() === "submission";
-});
-  
+  const allCommunityItems = communityBaseItems.filter((item) => {
+    return item.type?.toLowerCase().trim() === "submission";
+  });
+
   const allFutureCommunityItems = allFutureItems.filter((item) => {
     return item.type?.toLowerCase().trim() === "submission";
   });
 
-const communityCategories = [
-  // "all",
-  "An activity, event, class, or opportunity",
-  "A resource, article, tip, or link",
-  "A helpful Document, template, or guide",
-];
+  const communityCategories = [
+    // "all",
+    "An activity, event, class, or opportunity",
+    "A resource, article, tip, or link",
+    "A helpful Document, template, or guide",
+  ];
 
-const communityHubItems = allCommunityItems.filter((item) => {
-  if (communityFilter === "all") return true;
+  const communityHubItems = allCommunityItems.filter((item) => {
+    if (communityFilter === "all") return true;
 
-  return item.submissionType?.toLowerCase() === communityFilter.toLowerCase();
-});
+    return item.submissionType?.toLowerCase() === communityFilter.toLowerCase();
+  });
 
-const activeItems =
+  const activeItems =
     activeSection === "events" ? selectedForYouItems : communityHubItems;
-  
+
   const shouldShowDateFilter =
     activeSection === "events" ||
     (activeSection === "hub" &&
       communityFilter === "An activity, event, class, or opportunity");
+
+  async function handleInviteFriend(e) {
+    e.preventDefault();
+
+    if (!friendEmail.trim()) {
+      setInviteStatus("Please enter your friend's email.");
+      return;
+    }
+
+    try {
+      setInviteStatus("Sending invite...");
+
+      await fetch(
+        "https://hook.us2.make.com/hepeeat81s8tjwooabgyapa5f4dynzlp",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            memberEmail: rawData.email,
+            friendEmail: friendEmail.trim(),
+          }),
+        },
+      );
+
+      setInviteStatus("Invite sent successfully!");
+      setFriendEmail("");
+    } catch {
+      setInviteStatus("Something went wrong. Please try again.");
+    }
+  }
 
   // const introSteps = [
   //   "Reading your interests",
@@ -1389,6 +1416,145 @@ const activeItems =
         </div>
       </motion.section>
       {/* footer */}
+      <section className="relative z-10 px-6 pb-20 pt-6">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="mx-auto max-w-5xl overflow-hidden rounded-[36px] border border-white/40 bg-white/75 p-1 shadow-[0_35px_100px_rgba(15,23,42,0.12)] backdrop-blur-2xl"
+        >
+          <div
+            className="relative overflow-hidden rounded-4xl p-8 md:p-12"
+            style={{
+              background: `
+          radial-gradient(circle at top left, ${profile.theme.secondary}24, transparent 34%),
+          linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,255,255,0.72))
+        `,
+            }}
+          >
+            <motion.div
+              animate={{ x: ["-30%", "130%"] }}
+              transition={{
+                repeat: Infinity,
+                duration: 8,
+                ease: "easeInOut",
+              }}
+              className="absolute top-0 h-full w-60 rotate-12"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${profile.theme.secondary}22, transparent)`,
+                filter: "blur(24px)",
+              }}
+            />
+
+            <div className="relative z-10 grid gap-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
+              <div>
+                <div
+                  className="mb-5 inline-flex rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.22em]"
+                  style={{
+                    color: profile.theme.primary,
+                    backgroundColor: `${profile.theme.secondary}22`,
+                  }}
+                >
+                  Grow the BridgeAZ circle
+                </div>
+
+                <h2
+                  className="text-4xl font-black leading-tight md:text-5xl"
+                  style={{ color: profile.theme.primary }}
+                >
+                  {rawData.firstName}, know someone who would love BridgeAZ?
+                </h2>
+
+                <p className="mt-4 max-w-xl text-base leading-7 text-slate-600 md:text-lg">
+                  Help someone discover local events, resources, and
+                  opportunities tailored to their interests.
+                </p>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  {[
+                    "Local events",
+                    "Community resources",
+                    "Personalized picks",
+                  ].map((label) => (
+                    <span
+                      key={label}
+                      className="rounded-full border bg-white px-4 py-2 text-xs font-bold text-[#071A4A] shadow-sm"
+                      style={{ borderColor: `${profile.theme.secondary}55` }}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <form
+                onSubmit={handleInviteFriend}
+                className="relative rounded-3xl border border-white/60 bg-white/85 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+              >
+                <label className="text-sm font-black uppercase tracking-[0.2em] text-slate-500">
+                  Friend Email
+                </label>
+
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="email"
+                    value={friendEmail}
+                    onChange={(e) => setFriendEmail(e.target.value)}
+                    placeholder="friend@example.com"
+                    className="min-w-0 flex-1 rounded-2xl border bg-white px-4 py-3 text-sm font-semibold text-[#071A4A] outline-none transition focus:scale-[1.01]"
+                    style={{
+                      borderColor: `${profile.theme.primary}22`,
+                      boxShadow: `0 0 0 3px ${profile.theme.primary}08`,
+                    }}
+                    required
+                  />
+
+                  <button
+                    type="submit"
+                    className="relative overflow-hidden rounded-2xl px-6 py-3 text-sm font-black text-white shadow-xl transition hover:-translate-y-0.5 hover:scale-[1.02]"
+                    style={{
+                      backgroundColor: profile.theme.primary,
+                      boxShadow: `0 16px 36px ${profile.theme.primary}33`,
+                    }}
+                  >
+                    <motion.span
+                      className="absolute inset-0 opacity-60"
+                      animate={{ x: ["-120%", "120%"] }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 2.8,
+                        ease: "linear",
+                      }}
+                      style={{
+                        background: `linear-gradient(90deg, transparent, ${profile.theme.secondary}77, transparent)`,
+                      }}
+                    />
+
+                    <span className="relative z-10">Send Invite</span>
+                  </button>
+                </div>
+
+                {inviteStatus && (
+                  <p
+                    className="mt-4 rounded-2xl px-4 py-3 text-sm font-bold"
+                    style={{
+                      color: profile.theme.primary,
+                      backgroundColor: `${profile.theme.secondary}18`,
+                    }}
+                  >
+                    {inviteStatus}
+                  </p>
+                )}
+
+                <p className="mt-4 text-xs leading-5 text-slate-500">
+                  We’ll only use this email to send your BridgeAZ invitation.
+                </p>
+              </form>
+            </div>
+          </div>
+        </motion.div>
+      </section>
       <footer className="relative z-10 bg-[#071A4A] px-6 py-10 text-center text-white">
         <h3 className="text-2xl font-semibold">BridgeAZ</h3>
 

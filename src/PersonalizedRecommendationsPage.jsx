@@ -1,15 +1,16 @@
 // import { formatInTimeZone } from "date-fns-tz";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import FloatingScene from "./components/FloatingScene";
+import InterestManager from "./components/InterestManager";
+import LocalDirectory from "./components/LocalDirectory";
+// import { Swiper, SwiperSlide } from "swiper/react";
+// import { Navigation as SwiperNavigation, Pagination } from "swiper/modules";
 
-import { Swiper, SwiperSlide } from "swiper/react";
-import { Navigation, Pagination } from "swiper/modules";
-
-import "swiper/css";
-import "swiper/css/navigation";
-import "swiper/css/pagination";
+// import "swiper/css";
+// import "swiper/css/navigation";
+// import "swiper/css/pagination";
 const API_BASE =
   "https://bridgeaz-recommendations-server.vercel.app/api/recommendations";
 
@@ -21,44 +22,6 @@ const fallbackTheme = {
   font: "Inter",
   mood: "professional",
 };
-
-// const moodMotionMap = {
-//   energetic: {
-//     floatY: [0, -28, 0],
-//     floatX: [0, 24, 0],
-//     duration: 5,
-//     cardDelay: 0.08,
-//     heroScale: [1, 1.025, 1],
-//   },
-//   calm: {
-//     floatY: [0, -10, 0],
-//     floatX: [0, 8, 0],
-//     duration: 9,
-//     cardDelay: 0.16,
-//     heroScale: [1, 1.01, 1],
-//   },
-//   creative: {
-//     floatY: [0, -22, 0],
-//     floatX: [0, -22, 0],
-//     duration: 6,
-//     cardDelay: 0.1,
-//     heroScale: [1, 1.02, 1],
-//   },
-//   luxury: {
-//     floatY: [0, -8, 0],
-//     floatX: [0, 6, 0],
-//     duration: 10,
-//     cardDelay: 0.18,
-//     heroScale: [1, 1.008, 1],
-//   },
-//   professional: {
-//     floatY: [0, -14, 0],
-//     floatX: [0, 12, 0],
-//     duration: 8,
-//     cardDelay: 0.12,
-//     heroScale: [1, 1.012, 1],
-//   },
-// };
 
 function getAnimatedNames(realName) {
   const shuffled = [...fakeNames];
@@ -86,6 +49,12 @@ function normalizeData(data) {
 
   return {
     firstName: data?.firstName || "Guest",
+
+    heroBadge:
+      data?.recommendations?.heroBadge ||
+      data?.heroBadge ||
+      "Personalized For You",
+
     heroHeadline:
       data?.recommendations?.heroHeadline ||
       data?.heroHeadline ||
@@ -204,173 +173,263 @@ function ErrorState() {
   );
 }
 
+function CustomRecommendationCarousel({ items, theme }) {
+  const scrollRef = useRef(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const getGap = () => {
+    return window.innerWidth < 768 ? 16 : 28;
+  };
+
+  const scrollCarousel = (direction) => {
+    if (!scrollRef.current) return;
+
+    const container = scrollRef.current;
+    const card = container.querySelector("[data-carousel-card]");
+    const cardWidth = card?.offsetWidth || 360;
+    const gap = getGap();
+
+    container.scrollBy({
+      left: direction === "next" ? cardWidth + gap : -(cardWidth + gap),
+      behavior: "smooth",
+    });
+  };
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+
+    const container = scrollRef.current;
+    const card = container.querySelector("[data-carousel-card]");
+    if (!card) return;
+
+    const cardWidth = card.offsetWidth;
+    const gap = getGap();
+    const index = Math.round(container.scrollLeft / (cardWidth + gap));
+
+    setActiveIndex(index);
+  };
+
+  const scrollToItem = (index) => {
+    if (!scrollRef.current) return;
+
+    const container = scrollRef.current;
+    const card = container.querySelector("[data-carousel-card]");
+    if (!card) return;
+
+    const cardWidth = card.offsetWidth;
+    const gap = getGap();
+
+    container.scrollTo({
+      left: index * (cardWidth + gap),
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <div className="relative left-1/2 w-screen -translate-x-1/2 px-0 md:left-auto md:w-full md:translate-x-0">
+      {/* desktop arrows */}
+      <button
+        type="button"
+        onClick={() => scrollCarousel("prev")}
+        className="absolute -left-12.5 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white text-2xl font-bold text-[#071A4A] shadow-[0_12px_30px_rgba(7,26,74,0.16)] ring-1 ring-slate-200 transition hover:-translate-x-1 hover:shadow-[0_18px_42px_rgba(7,26,74,0.22)] md:flex"
+        aria-label="Previous recommendations"
+      >
+        ‹
+      </button>
+
+      <button
+        type="button"
+        onClick={() => scrollCarousel("next")}
+        className="absolute -right-12.5 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white text-2xl font-bold text-[#071A4A] shadow-[0_12px_30px_rgba(7,26,74,0.16)] ring-1 ring-slate-200 transition hover:translate-x-1 hover:shadow-[0_18px_42px_rgba(7,26,74,0.22)] md:flex"
+        aria-label="Next recommendations"
+      >
+        ›
+      </button>
+
+      <div className="mx-auto w-[calc(100vw-86px)] overflow-hidden md:w-full md:overflow-visible">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 md:gap-7 md:pb-8 [-ms-overflow-style:none] scrollbar-none [&::-webkit-scrollbar]:hidden"
+        >
+          {items.map((item, index) => (
+            <div
+              key={index}
+              data-carousel-card
+              className="w-full min-w-full max-w-full shrink-0 snap-start md:w-[calc((100%-28px)/2)] md:min-w-[calc((100%-28px)/2)] md:max-w-[calc((100%-28px)/2)] xl:w-[calc((100%-56px)/3)] xl:min-w-[calc((100%-56px)/3)] xl:max-w-[calc((100%-56px)/3)]"
+            >
+              <RecommendationCard item={item} theme={theme} index={index} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* dots */}
+      <div className="relative z-20 mt-3 flex justify-center">
+        <div className="flex items-center justify-center gap-2 rounded-full bg-white/80 px-3 py-2 shadow-[0_10px_28px_rgba(7,26,74,0.12)] backdrop-blur-md ring-1 ring-white/70">
+          {items.map((_, index) => (
+            <button
+              key={index}
+              type="button"
+              onClick={() => scrollToItem(index)}
+              className="h-2 rounded-full transition-all duration-300"
+              style={{
+                width: activeIndex === index ? "26px" : "8px",
+                background:
+                  activeIndex === index
+                    ? `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                    : "#94A3B8",
+              }}
+              aria-label={`Go to recommendation ${index + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RecommendationCard({ item, theme, index }) {
+  const hasImage = Boolean(item?.imageUrl);
+
   return (
     <motion.div
-      whileHover="hover"
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
-      className="relative flex h-full min-h-130 flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-[0_15px_45px_rgba(7,26,74,0.08)] transition duration-300 hover:-translate-y-2 hover:shadow-[0_25px_60px_rgba(7,26,74,0.16)]"
+      transition={{ delay: index * 0.07 }}
+      className="h-full"
     >
-      <div
-        className="absolute left-0 top-0 h-full w-1.5"
-        style={{ backgroundColor: theme.secondary }}
-      />
-
-      <span
-        className="mb-5 inline-block rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider text-white"
-        style={{ backgroundColor: theme.primary }}
-      >
-        {item?.type || "Local Pick"}
-      </span>
-
-      <h3 className="text-2xl font-bold leading-tight text-[#071A4A]">
-        {item?.title}
-      </h3>
-
-      {item?.details && (
-        <p className="mt-4 leading-7 text-gray-600">{item.details}</p>
-      )}
-
-      <div className="mt-5 space-y-2 text-sm text-gray-500">
-        {item?.date && <p>📅 {item.date}</p>}
-        {item?.location && <p>📍 {item.location}</p>}
-      </div>
-      <div className="mt-auto pt-6 md:hidden">
-        {item?.link && (
-          <a
-            href={item.link}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white"
-            style={{
-              backgroundColor: theme.primary,
-            }}
-          >
-            <span>Explore</span>
-            <span>→</span>
-          </a>
-        )}
-      </div>
-      <motion.div
-        variants={{
-          hover: { opacity: 1 },
-        }}
-        initial={{ opacity: 0 }}
-        className="pointer-events-none absolute inset-0 z-50 overflow-hidden"
-      >
-        <motion.div
-          variants={{
-            hover: {
-              opacity: 1,
-              scale: 1,
-            },
-          }}
-          initial={{
-            opacity: 0,
-            scale: 1.08,
-          }}
-          transition={{
-            duration: 0.45,
-            ease: [0.22, 1, 0.36, 1],
-          }}
-          className="absolute inset-0"
-          style={{
-            background: `
-      radial-gradient(
-        circle at top left,
-        ${theme.secondary}22,
-        transparent 35%
-      ),
-      linear-gradient(
-        135deg,
-        rgba(7,26,74,0.72),
-        rgba(7,26,74,0.45)
-      )
-    `,
-          }}
-        />
-        <motion.div
-          animate={{ rotate: [0, 360] }}
-          transition={{
-            repeat: Infinity,
-            duration: 12,
-            ease: "linear",
-          }}
-          className="absolute -left-20 -top-20 h-56 w-56 rounded-full blur-3xl"
-          style={{ background: `${theme.secondary}66` }}
+      <div className="group relative flex h-full min-h-113.75 w-full cursor-pointer flex-col overflow-hidden rounded-[30px]  bg-white/92 p-2 shadow-[0_18px_50px_rgba(7,26,74,0.12)] ring-1 ring-white/80 backdrop-blur-xl transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_30px_80px_rgba(7,26,74,0.20)]">
+        {/* soft premium glow */}
+        <div
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-20 blur-3xl transition duration-500 group-hover:opacity-45"
+          style={{ backgroundColor: theme.secondary }}
         />
 
-        <div className="relative z-10 flex h-full items-center justify-center">
-          {item?.link ? (
-            <motion.a
-              href={item.link}
-              target="_blank"
-              rel="noreferrer"
-              animate={{
-                boxShadow: [
-                  `0 4px 14px rgba(7,26,74,0.10), 0 0 0 1px ${theme.secondary}22`,
-                  `0 6px 20px rgba(7,26,74,0.14), 0 0 0 2px ${theme.secondary}55`,
-                  `0 4px 14px rgba(7,26,74,0.10), 0 0 0 1px ${theme.secondary}22`,
-                ],
-              }}
-              transition={{
-                boxShadow: {
-                  repeat: Infinity,
-                  duration: 2.2,
-                  ease: "easeInOut",
-                },
-              }}
-              className="pointer-events-auto relative inline-flex items-center gap-2 overflow-hidden rounded-full border bg-white px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-[#071A4A] transition-all duration-300 hover:scale-105"
-              style={{
-                borderColor: `${theme.secondary}55`,
-              }}
-            >
-              {/* moving premium glow */}
-              <motion.div
-                animate={{
-                  x: ["-120%", "120%"],
-                }}
-                transition={{
-                  repeat: Infinity,
-                  duration: 2.8,
-                  ease: "linear",
-                }}
-                className="pointer-events-none absolute inset-0 opacity-70"
-                style={{
-                  background: `linear-gradient(
-        90deg,
-        transparent,
-        ${theme.secondary}44,
-        transparent
-      )`,
-                }}
-              />
+        <div
+          className="pointer-events-none absolute -left-20 bottom-10 h-44 w-44 rounded-full opacity-10 blur-3xl transition duration-500 group-hover:opacity-25"
+          style={{ backgroundColor: theme.primary }}
+        />
 
-              {/* subtle top edge */}
-              <div
-                className="absolute inset-x-0 top-0 h-px"
-                style={{
-                  background: `linear-gradient(
-        90deg,
-        transparent,
-        ${theme.secondary},
-        transparent
-      )`,
-                }}
-              />
-
-              <span className="relative z-10">Explore</span>
-              <span className="relative z-10">→</span>
-            </motion.a>
+        {/* image */}
+        <div className="relative h-56 overflow-hidden rounded-[22px] bg-slate-100 shadow-[0_14px_35px_rgba(7,26,74,0.12)]">
+          {hasImage ? (
+            <img
+              src={item.imageUrl}
+              alt={item?.title || "Recommendation image"}
+              className="h-full w-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] group-hover:scale-110"
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
           ) : (
-            <div className="rounded-full border border-white/40 bg-white/90 px-7 py-3 text-sm font-black text-[#071A4A] shadow-[0_10px_40px_rgba(255,255,255,0.25)] backdrop-blur-xl">
-              Details Coming Soon
+            <div
+              className="h-full w-full"
+              style={{
+                background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`,
+              }}
+            />
+          )}
+
+          <div className="absolute inset-0 bg-linear-to-t from-[#071A4A]/78 via-[#071A4A]/12 to-transparent" />
+
+          {/* shine sweep */}
+          <div className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 skew-x-[-18deg] bg-white/30 opacity-0 transition-all duration-700 group-hover:left-[120%] group-hover:opacity-100" />
+
+          {/* type badge */}
+          <div className="absolute left-4 top-4">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/95 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#071A4A] shadow-[0_12px_28px_rgba(7,26,74,0.16)] backdrop-blur-md">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: theme.secondary }}
+              />
+              {item?.type || "Local Pick"}
+            </span>
+          </div>
+
+          {/* date */}
+          {item?.date && (
+            <div className="absolute bottom-4 left-4 right-4">
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/45 bg-white/95 px-3.5 py-1.5 text-xs font-bold text-[#071A4A] shadow-[0_12px_28px_rgba(7,26,74,0.16)] backdrop-blur-xl">
+                <span>📅</span>
+                <span className="truncate">{item.date}</span>
+              </div>
             </div>
           )}
         </div>
-      </motion.div>
+
+        {/* content */}
+        <div className="relative z-10 flex flex-1 flex-col px-4 pb-4 pt-5">
+          <h3 className="line-clamp-2 text-[24px] font-black leading-[1.05] tracking-[-0.04em] text-[#071A4A]">
+            {item?.title}
+          </h3>
+
+          <div
+            className="mt-3 h-1 w-12 rounded-full"
+            style={{
+              background: `linear-gradient(90deg, ${theme.primary}, ${theme.secondary})`,
+              boxShadow: `0 0 18px ${theme.secondary}66`,
+            }}
+          />
+
+          {item?.details && (
+            <p className="mt-4 line-clamp-3 text-[14px] font-medium leading-6 text-slate-600">
+              {item.details}
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {item?.location && (
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-[0_8px_20px_rgba(7,26,74,0.06)] ring-1 ring-slate-200/80">
+                <span>📍</span>
+                <span className="truncate">{item.location}</span>
+              </div>
+            )}
+
+            {item?.submissionType && (
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-[0_8px_20px_rgba(7,26,74,0.06)] ring-1 ring-slate-200/80">
+                <span>🏷️</span>
+                <span className="truncate">{item.submissionType}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-auto pt-6">
+            {item?.link ? (
+              <a
+                href={item.link}
+                target="_blank"
+                rel="noreferrer"
+                className="group/btn relative inline-flex w-full items-center justify-between overflow-hidden rounded-2xl px-4 py-3.5 text-sm font-black text-white shadow-[0_14px_34px_rgba(7,26,74,0.18)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_18px_44px_rgba(7,26,74,0.24)]"
+                style={{
+                  background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`,
+                }}
+              >
+                <span className="absolute inset-0 bg-white/0 transition duration-300 group-hover/btn:bg-white/12" />
+
+                <span className="relative z-10">View Details</span>
+
+                <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 transition duration-300 group-hover/btn:translate-x-1">
+                  →
+                </span>
+              </a>
+            ) : (
+              <div className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-50 px-4 py-3.5 text-sm font-black text-slate-500 ring-1 ring-slate-200">
+                Details Coming Soon
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* elegant bottom accent */}
+        <div
+          className="absolute bottom-0 left-10 right-10 h-0.75 rounded-full opacity-80"
+          style={{
+            background: `linear-gradient(90deg, transparent, ${theme.primary}, ${theme.secondary}, transparent)`,
+          }}
+        />
+      </div>
     </motion.div>
   );
 }
@@ -450,7 +509,7 @@ export default function PersonalizedRecommendationsPage() {
   const [communityFilter, setCommunityFilter] = useState("all");
   const [friendEmail, setFriendEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
-
+  const [showInterestModal, setShowInterestModal] = useState(false);
   useEffect(() => {
     let active = true;
 
@@ -478,7 +537,7 @@ export default function PersonalizedRecommendationsPage() {
         }
 
         const result = JSON.parse(text);
-
+        console.log("RECOMMENDATION API RESULT:", result);
         if (result?.success === true) {
           sessionStorage.setItem(cacheKey, JSON.stringify(result));
           setRawData(result);
@@ -828,7 +887,7 @@ export default function PersonalizedRecommendationsPage() {
         </div>
       </div>
       {/* logo */}
-      <section className="relative z-10 px-6 py-10 text-center">
+      <section className="relative z-10 px-6 py-6 md:py-8 text-center">
         <motion.img
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -991,58 +1050,95 @@ export default function PersonalizedRecommendationsPage() {
               </p>
 
               {/* chips */}
-              <div className="mt-8 flex flex-wrap gap-3">
-                {(profile.theme.personalityChips || []).map((chip, index) => (
-                  <motion.div
-                    key={chip}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{
-                      opacity: 1,
-                      scale: 1,
-                      boxShadow: [
-                        `0 8px 22px rgba(7,26,74,0.12), 0 0 0 1px ${profile.theme.secondary}22`,
-                        `0 8px 28px rgba(7,26,74,0.16), 0 0 0 3px ${profile.theme.secondary}55`,
-                        `0 8px 22px rgba(7,26,74,0.12), 0 0 0 1px ${profile.theme.secondary}22`,
-                      ],
-                    }}
-                    transition={{
-                      delay: 0.4 + index * 0.08,
-                      boxShadow: {
-                        repeat: Infinity,
-                        duration: 2.4,
-                        ease: "easeInOut",
-                      },
-                    }}
-                    className="relative rounded-full border bg-white px-5 py-3 text-sm font-bold text-[#071A4A]"
-                    style={{
-                      borderColor: `${profile.theme.secondary}66`,
-                    }}
-                  >
-                    {chip}
-                  </motion.div>
-                ))}
+              <div className="mt-8 overflow-hidden">
+                <motion.div
+                  initial={{ opacity: 0, x: -60 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true, amount: 0.6 }}
+                  transition={{
+                    duration: 0.8,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-black uppercase tracking-[0.22em] text-slate-500"
+                >
+                  {(profile.theme.personalityChips || []).map((chip, index) => (
+                    <span key={chip} className="inline-flex items-center gap-4">
+                      <span>{chip}</span>
+                      {index <
+                        (profile.theme.personalityChips || []).length - 1 && (
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: profile.theme.secondary }}
+                        />
+                      )}
+                    </span>
+                  ))}
+                </motion.div>
               </div>
-
-              {/* theme badge */}
               <div className="mt-10">
-                <span
-                  className="inline-flex items-center rounded-full px-6 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-xl"
+                <p
+                  className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em]"
                   style={{
-                    backgroundColor: "#071A4A",
-                    boxShadow: `0 12px 32px rgba(7,26,74,0.28), 0 0 0 3px ${profile.theme.secondary}22`,
+                    color: profile.theme.primary,
+                    textShadow: `0 0 10px ${profile.theme.secondary}33`,
                   }}
                 >
-                  {profile.themeName}
-                </span>
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{
+                      backgroundColor: profile.theme.secondary,
+                      boxShadow: `0 0 12px ${profile.theme.secondary}`,
+                    }}
+                  />
+                  Want better recommendations?
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setShowInterestModal(true)}
+                  className="group relative inline-block text-xl p-2"
+                >
+                  <span className="relative z-10 block overflow-hidden rounded-lg border-2 border-[#071A4A] px-5 py-3 font-medium leading-tight text-[#071A4A] transition-colors duration-300 ease-out group-hover:text-white">
+                    <span className="absolute inset-0 h-full w-full rounded-lg bg-white"></span>
+
+                    <span
+                      className="absolute left-1/2 top-1/2 h-80 w-80 translate-x-[140%] -translate-y-1/2 -rotate-90 rounded-full transition-all duration-500 ease-out group-hover:-translate-x-1/2 group-hover:-rotate-180"
+                      style={{
+                        background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
+                      }}
+                    />
+
+                    <span className="relative font-black">
+                      Update Your Interests
+                    </span>
+                  </span>
+
+                  <span
+                    className="absolute bottom-0 right-0 h-12 w-full -mb-1 -mr-1 rounded-lg transition-all duration-200 ease-linear group-hover:mb-0 group-hover:mr-0"
+                    style={{
+                      background: profile.theme.primary,
+                    }}
+                  />
+                </button>
+              </div>
+              {/* theme badge */}
+              <div className="mt-10">
+                <div className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-500">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: profile.theme.secondary }}
+                  />
+                  <span>{profile.themeName}</span>
+                </div>
               </div>
             </div>
           </motion.div>
         </motion.div>
       </section>
       {/* recommendations */}
-      <section className="relative z-10 px-6 pb-20">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-10">
+      <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-12">
+        <div className="mx-auto w-full max-w-7xl px-4">
+          <div className="mb-6 md:mb-8">
             {/* <p className="text-sm font-bold uppercase tracking-[0.3em] text-[#C62828]">
               AI-Curated Local Picks
             </p> */}
@@ -1152,9 +1248,9 @@ export default function PersonalizedRecommendationsPage() {
             </p>
           </div>
 
-          <div className="relative px-14 pb-16">
+          <div className="relative px-0 pb-6 md:px-12 md:pb-8">
             {shouldShowDateFilter && (
-              <div className="mb-8">
+              <div className="mb-5 md:mb-6">
                 {/* Mobile dropdown */}
                 <div className="md:hidden">
                   <label className="mb-2 block text-sm font-black text-[#071A4A]">
@@ -1228,72 +1324,20 @@ export default function PersonalizedRecommendationsPage() {
               </div>
             )}
 
-            <Swiper
-              modules={[Navigation, Pagination]}
-              spaceBetween={24}
-              navigation
-              pagination={{ clickable: true }}
-              className="static!"
-              breakpoints={{
-                0: { slidesPerView: 1 },
-                768: { slidesPerView: 2 },
-                1280: { slidesPerView: 3 },
-              }}
-            >
-              {activeItems.map((item, index) => (
-                <SwiperSlide key={index} className="h-auto!">
-                  <RecommendationCard
-                    item={item}
-                    theme={profile.theme}
-                    index={index}
-                  />
-                </SwiperSlide>
-              ))}
-            </Swiper>
+            <div className="relative px-0 md:px-10">
+              <CustomRecommendationCarousel
+                items={activeItems}
+                theme={profile.theme}
+              />
+            </div>
+            {activeSection === "hub" && (
+              <LocalDirectory theme={profile.theme} />
+            )}
           </div>
         </div>
       </section>
       {/* floating AI delight */}
-      <motion.div
-        animate={{
-          y: [0, -18, 0],
-          rotate: [0, 7, -7, 0],
-          scale: [1, 1.05, 1],
-        }}
-        transition={{
-          repeat: Infinity,
-          duration: 5,
-        }}
-        className="fixed bottom-8 right-8 z-60"
-      >
-        <div className="group relative hidden cursor-pointer md:block">
-          <div
-            className="flex h-20 w-20 items-center justify-center rounded-full shadow-2xl backdrop-blur-xl"
-            style={{
-              background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
-              boxShadow: `0 20px 60px ${profile.theme.secondary}66`,
-            }}
-          >
-            <span className="text-4xl">
-              {profile.theme.delightIcon || "✨"}
-            </span>
-          </div>
 
-          <div className="absolute bottom-24 right-0 hidden w-72 rounded-2xl bg-white p-5 shadow-2xl group-hover:block">
-            <p
-              className="text-xs font-bold uppercase tracking-[0.2em]"
-              style={{ color: profile.theme.secondary }}
-            >
-              {profile.theme.delightLabel || "Local vibe unlocked"}
-            </p>
-
-            <p className="mt-2 text-sm font-medium text-[#071A4A]">
-              {profile.theme.delightMessage ||
-                "A personalized pick is waiting for you."}
-            </p>
-          </div>
-        </div>
-      </motion.div>
       <motion.section
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -1416,7 +1460,7 @@ export default function PersonalizedRecommendationsPage() {
         </div>
       </motion.section>
       {/* footer */}
-      <section className="relative z-10 px-6 pb-20 pt-6">
+      <section className="relative z-10 px-6 pb-10 pt-0 md:pb-16">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -1611,13 +1655,63 @@ export default function PersonalizedRecommendationsPage() {
           </div>
         </motion.div>
       </section>
-      <footer className="relative z-10 bg-[#071A4A] px-6 py-10 text-center text-white">
-        <h3 className="text-2xl font-semibold">BridgeAZ</h3>
 
-        <p className="mt-2 text-sm text-white/70">
-          Personalized recommendations powered by your interests.
-        </p>
+      <footer
+        className="relative z-10 overflow-hidden px-6 py-10 text-center text-white"
+        style={{
+          background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
+        }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[#071A4A]/35" />
+
+        <motion.div
+          animate={{
+            x: ["-120%", "120%"],
+          }}
+          transition={{
+            repeat: Infinity,
+            duration: 5,
+            ease: "linear",
+          }}
+          className="pointer-events-none absolute inset-y-0 w-52 rotate-12 bg-white/10 blur-2xl"
+        />
+
+        <div className="relative z-10 mx-auto max-w-5xl">
+          <h3 className="text-2xl font-black tracking-tight">BridgeAZ</h3>
+
+          <div className="mx-auto mt-3 h-1 w-20 rounded-full bg-white/70" />
+
+          <p className="mx-auto mt-4 max-w-xl text-sm font-medium leading-6 text-white/80">
+            Personalized recommendations created for {profile.firstName},
+            powered by your interests and BridgeAZ connections.
+          </p>
+
+          <p className="mt-5 text-xs font-black uppercase tracking-[0.28em] text-white/60">
+            Prescott, Arizona
+          </p>
+        </div>
       </footer>
+      {showInterestModal && (
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-[#071A4A]/70 px-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-4xl bg-white shadow-[0_30px_100px_rgba(0,0,0,0.35)]">
+            <button
+              type="button"
+              onClick={() => setShowInterestModal(false)}
+              className="absolute right-5 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xl font-black text-[#071A4A] transition hover:bg-slate-200"
+            >
+              ×
+            </button>
+
+            <div className="pt-12">
+              <InterestManager
+                key={`${rawData?.email || rawData?.token || "member"}-${rawData?.interestTags || rawData?.["Interest Tags"] || ""}`}
+                rawData={rawData}
+                profile={profile}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-const DIRECTORY_API =
-  "https://bridgeaz.co/wp-json/wp/v2/rtcl_listing?per_page=100&_embed";
+const DIRECTORY_API = import.meta.env.DEV
+  ? "/bridgeaz-api/wp-json/wp/v2/rtcl_listing?per_page=100&_embed"
+  : "/api/directory.php";
 
 const fallbackTheme = {
   primary: "#2F66D0",

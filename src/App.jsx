@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import PersonalizedRecommendationsPage from "./PersonalizedRecommendationsPage";
+import LocalDirectory from "./components/LocalDirectory";
 
 export default function App() {
   return (
@@ -24,6 +25,8 @@ export default function App() {
           path="/recommendations/:token"
           element={<PersonalizedRecommendationsPage />}
         />
+
+        <Route path="/directory" element={<LocalDirectory />} />
       </Routes>
     </BrowserRouter>
   );

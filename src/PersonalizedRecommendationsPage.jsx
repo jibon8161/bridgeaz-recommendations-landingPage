@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import FloatingScene from "./components/FloatingScene";
 import InterestManager from "./components/InterestManager";
 import LocalDirectory from "./components/LocalDirectory";
+import ProfileEditor from "./components/ProfileEditor";
 // import { Swiper, SwiperSlide } from "swiper/react";
 // import { Navigation as SwiperNavigation, Pagination } from "swiper/modules";
 
@@ -520,11 +521,9 @@ export default function PersonalizedRecommendationsPage() {
         const cacheKey = `recommendations-${token}`;
         const cached = sessionStorage.getItem(cacheKey);
 
-        if (cached) {
-          setRawData(JSON.parse(cached));
-          setLoading(false);
-          return;
-        }
+    if (cached) {
+      setRawData(JSON.parse(cached));
+    }
 
         const response = await fetch(`${API_BASE}/${token}`);
         const text = await response.text();
@@ -1135,6 +1134,10 @@ export default function PersonalizedRecommendationsPage() {
           </motion.div>
         </motion.div>
       </section>
+
+      {/* profile editor */}
+      <ProfileEditor initialData={rawData} theme={profile.theme} />
+
       {/* recommendations */}
       <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-12">
         <div className="mx-auto w-full max-w-7xl px-4">
@@ -1331,7 +1334,7 @@ export default function PersonalizedRecommendationsPage() {
               />
             </div>
             {activeSection === "hub" && (
-              <LocalDirectory theme={profile.theme} />
+              <LocalDirectory theme={profile.theme} viewerToken={token} />
             )}
           </div>
         </div>

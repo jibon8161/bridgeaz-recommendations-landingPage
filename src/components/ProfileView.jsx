@@ -1469,6 +1469,239 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
   }, [memberRecordId]);
 
   /* =====================================================
+   CONNECTION INBOX
+===================================================== */
+
+  const [connectionInbox, setConnectionInbox] = useState([]);
+  const [connectionInboxLoading, setConnectionInboxLoading] = useState(
+    Boolean(token),
+  );
+  const [connectionInboxError, setConnectionInboxError] = useState("");
+  const [activeConnectionTab, setActiveConnectionTab] = useState("received");
+  const [selectedConnection, setSelectedConnection] = useState(null);
+  const [connectionMessages, setConnectionMessages] = useState([]);
+  const [connectionMessagesLoading, setConnectionMessagesLoading] =
+    useState(false);
+  const [connectionMessagesError, setConnectionMessagesError] = useState("");
+
+ useEffect(() => {
+   if (!token) {
+     return undefined;
+   }
+
+   const controller = new AbortController();
+
+   async function loadConnectionInbox() {
+     try {
+       const response = await fetch(`${API_BASE}/api/profile/connect/inbox`, {
+         method: "POST",
+
+         headers: {
+           "Content-Type": "application/json",
+         },
+
+         body: JSON.stringify({
+           memberToken: token,
+         }),
+
+         signal: controller.signal,
+       });
+
+       const result = await response.json();
+
+       if (!response.ok || !result?.success) {
+         throw new Error(result?.error || "Could not load Bridge connections.");
+       }
+
+       if (controller.signal.aborted) {
+         return;
+       }
+
+       setConnectionInbox(
+         Array.isArray(result?.connections) ? result.connections : [],
+       );
+
+       setConnectionInboxError("");
+     } catch (error) {
+       if (error?.name === "AbortError") {
+         return;
+       }
+
+       console.error("Connection inbox error:", error);
+
+       setConnectionInboxError(
+         error?.message || "Connections are temporarily unavailable.",
+       );
+     } finally {
+       if (!controller.signal.aborted) {
+         setConnectionInboxLoading(false);
+       }
+     }
+   }
+
+   loadConnectionInbox();
+
+   return () => controller.abort();
+ }, [token]);
+  
+  useEffect(() => {
+    const connectionRecordId = selectedConnection?.connectionRecordId;
+
+    if (!token || !connectionRecordId) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    async function loadConnectionMessages() {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/profile/connect/messages`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              memberToken: token,
+              connectionRecordId,
+            }),
+            signal: controller.signal,
+          },
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result?.success) {
+          throw new Error(
+            result?.error || "Could not load conversation messages.",
+          );
+        }
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setConnectionMessages(
+          Array.isArray(result?.messages) ? result.messages : [],
+        );
+
+        setConnectionMessagesError("");
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+
+        console.error("Connection messages error:", error);
+
+        setConnectionMessagesError(
+          error?.message || "Conversation is temporarily unavailable.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setConnectionMessagesLoading(false);
+        }
+      }
+    }
+
+    loadConnectionMessages();
+
+    return () => controller.abort();
+  }, [token, selectedConnection]);
+
+  useEffect(() => {
+    const connectionRecordId = selectedConnection?.connectionRecordId;
+
+    if (!token || !connectionRecordId || !selectedConnection?.unread) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    async function markConnectionRead() {
+      try {
+        const response = await fetch(`${API_BASE}/api/profile/connect/read`, {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            memberToken: token,
+            connectionRecordId,
+          }),
+
+          signal: controller.signal,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result?.success) {
+          throw new Error(
+            result?.error || "Could not mark conversation as read.",
+          );
+        }
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setConnectionInbox((current) =>
+          current.map((connection) =>
+            connection.connectionRecordId === connectionRecordId
+              ? {
+                  ...connection,
+                  unread: false,
+                }
+              : connection,
+          ),
+        );
+
+        setSelectedConnection((current) =>
+          current?.connectionRecordId === connectionRecordId
+            ? {
+                ...current,
+                unread: false,
+              }
+            : current,
+        );
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+
+        console.error("Mark connection read error:", error);
+      }
+    }
+
+    markConnectionRead();
+
+    return () => controller.abort();
+  }, [
+    token,
+    selectedConnection?.connectionRecordId,
+    selectedConnection?.unread,
+  ]);
+
+  const receivedConnections = useMemo(
+    () =>
+      connectionInbox.filter(
+        (connection) => connection?.direction === "received",
+      ),
+    [connectionInbox],
+  );
+
+  const sentConnections = useMemo(
+    () =>
+      connectionInbox.filter((connection) => connection?.direction === "sent"),
+    [connectionInbox],
+  );
+
+  const visibleConnections =
+    activeConnectionTab === "received" ? receivedConnections : sentConnections;
+
+  /* =====================================================
      PROFILE LISTS
   ===================================================== */
 
@@ -1805,8 +2038,7 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
     publicSocialLinks.length > 0 ||
     (showEmail && Boolean(email)) ||
     (showPhone && Boolean(phone));
-  
-  
+
   const activeFollowMembers =
     activeFollowList === "followers"
       ? socialSummary.followers
@@ -2261,6 +2493,221 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
                   No connections yet.
                 </p>
               )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {selectedConnection && (
+        <div
+          className="
+      fixed
+      inset-0
+      z-[12500]
+      flex
+      items-center
+      justify-center
+      bg-slate-950/45
+      p-4
+      backdrop-blur-sm
+    "
+          onClick={() => setSelectedConnection(null)}
+        >
+          <motion.div
+            initial={{
+              opacity: 0,
+              scale: 0.95,
+              y: 20,
+            }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              y: 0,
+            }}
+            onClick={(event) => event.stopPropagation()}
+            className="
+        flex
+        max-h-[85vh]
+        w-full
+        max-w-2xl
+        flex-col
+        overflow-hidden
+        rounded-[32px]
+        bg-white
+        shadow-[0_35px_120px_rgba(15,23,42,.30)]
+      "
+          >
+            {/* HEADER */}
+
+            <div
+              className="
+          flex
+          items-center
+          justify-between
+          gap-4
+          border-b
+          border-slate-100
+          p-6
+        "
+            >
+              <div className="min-w-0">
+                <p
+                  className="
+              text-[10px]
+              font-black
+              uppercase
+              tracking-[0.16em]
+            "
+                  style={{
+                    color: secondary,
+                  }}
+                >
+                  Bridge Conversation
+                </p>
+
+                <h2
+                  className="
+              mt-2
+              truncate
+              text-2xl
+              font-black
+              tracking-[-0.04em]
+            "
+                  style={{
+                    color: primary,
+                  }}
+                >
+                  {selectedConnection?.otherMember?.fullName ||
+                    [
+                      selectedConnection?.otherMember?.firstName,
+                      selectedConnection?.otherMember?.lastName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") ||
+                    "Bridge Member"}
+                </h2>
+
+                <p className="mt-1 text-sm font-semibold text-slate-500">
+                  {selectedConnection.connectionReason}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedConnection(null)}
+                className="
+            flex
+            h-10
+            w-10
+            shrink-0
+            items-center
+            justify-center
+            rounded-full
+            bg-slate-100
+            text-lg
+            font-black
+            text-slate-500
+            transition
+            hover:bg-slate-200
+          "
+              >
+                ×
+              </button>
+            </div>
+
+            {/* MESSAGES */}
+
+            <div
+              className="
+          flex-1
+          overflow-y-auto
+          bg-slate-50/70
+          p-5
+          md:p-6
+        "
+            >
+              {connectionMessagesLoading && (
+                <p className="py-10 text-center text-sm font-bold text-slate-400">
+                  Loading conversation...
+                </p>
+              )}
+
+              {!connectionMessagesLoading && connectionMessagesError && (
+                <div
+                  className="
+              rounded-[22px]
+              border
+              border-amber-100
+              bg-amber-50
+              p-5
+            "
+                >
+                  <p className="text-sm font-bold text-amber-800">
+                    {connectionMessagesError}
+                  </p>
+                </div>
+              )}
+
+              {!connectionMessagesLoading &&
+                !connectionMessagesError &&
+                connectionMessages.length === 0 && (
+                  <p className="py-10 text-center text-sm font-bold text-slate-400">
+                    No messages in this conversation yet.
+                  </p>
+                )}
+
+              {!connectionMessagesLoading &&
+                !connectionMessagesError &&
+                connectionMessages.length > 0 && (
+                  <div className="space-y-4">
+                    {connectionMessages.map((item) => (
+                      <div
+                        key={item.messageRecordId}
+                        className={`flex ${
+                          item.isMine ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        <div
+                          className="
+                      max-w-[82%]
+                      rounded-[22px]
+                      px-4
+                      py-3
+                      shadow-sm
+                    "
+                          style={{
+                            background: item.isMine
+                              ? `linear-gradient(
+                            135deg,
+                            ${primary},
+                            ${secondary}
+                          )`
+                              : "#ffffff",
+
+                            color: item.isMine ? "#ffffff" : "#334155",
+                          }}
+                        >
+                          <p className="whitespace-pre-wrap text-sm font-medium leading-6">
+                            {item.message}
+                          </p>
+
+                          {item.createdAt && (
+                            <p
+                              className={`
+                          mt-2
+                          text-[9px]
+                          font-bold
+                          ${item.isMine ? "text-white/60" : "text-slate-400"}
+                        `}
+                            >
+                              {new Date(item.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
             </div>
           </motion.div>
         </div>
@@ -4266,6 +4713,311 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
                   </div>
                 )}
             </div>
+          </GlassCard>
+        </Reveal>
+      </section>
+
+      {/* =====================================================
+    BRIDGE CONNECTIONS
+===================================================== */}
+
+      <section
+        className="
+    relative
+    z-10
+    px-4
+    py-5
+    md:px-6
+  "
+      >
+        <Reveal>
+          <GlassCard
+            className="
+        mx-auto
+        max-w-[1400px]
+        p-7
+        md:p-10
+      "
+          >
+            <Eyebrow secondary={secondary}>Bridge Connections</Eyebrow>
+
+            <div
+              className="
+          mt-4
+          flex
+          flex-col
+          gap-4
+          md:flex-row
+          md:items-end
+          md:justify-between
+        "
+            >
+              <div>
+                <h2
+                  className="
+              text-3xl
+              font-black
+              tracking-[-0.045em]
+              md:text-4xl
+            "
+                  style={{
+                    color: primary,
+                  }}
+                >
+                  Your conversations
+                </h2>
+
+                <p className="mt-2 text-sm font-medium text-slate-500">
+                  Connection requests and conversations facilitated through
+                  Bridge.
+                </p>
+              </div>
+
+              <div className="flex gap-2 rounded-full bg-slate-100 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveConnectionTab("received")}
+                  className="
+              rounded-full
+              px-5
+              py-2.5
+              text-xs
+              font-black
+              transition
+            "
+                  style={{
+                    color:
+                      activeConnectionTab === "received" ? "#ffffff" : primary,
+
+                    backgroundColor:
+                      activeConnectionTab === "received"
+                        ? primary
+                        : "transparent",
+                  }}
+                >
+                  Received ({receivedConnections.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveConnectionTab("sent")}
+                  className="
+              rounded-full
+              px-5
+              py-2.5
+              text-xs
+              font-black
+              transition
+            "
+                  style={{
+                    color: activeConnectionTab === "sent" ? "#ffffff" : primary,
+
+                    backgroundColor:
+                      activeConnectionTab === "sent" ? primary : "transparent",
+                  }}
+                >
+                  Sent ({sentConnections.length})
+                </button>
+              </div>
+            </div>
+
+            {connectionInboxLoading && (
+              <p className="mt-7 text-sm font-bold text-slate-400">
+                Loading connections...
+              </p>
+            )}
+
+            {!connectionInboxLoading && connectionInboxError && (
+              <div
+                className="
+            mt-7
+            rounded-[24px]
+            border
+            border-amber-100
+            bg-amber-50
+            p-5
+          "
+              >
+                <p className="text-sm font-bold text-amber-800">
+                  {connectionInboxError}
+                </p>
+              </div>
+            )}
+
+            {!connectionInboxLoading &&
+              !connectionInboxError &&
+              visibleConnections.length === 0 && (
+                <div
+                  className="
+              mt-7
+              rounded-[28px]
+              border
+              border-dashed
+              border-slate-200
+              bg-slate-50/70
+              p-8
+              text-center
+            "
+                >
+                  <p className="text-sm font-bold text-slate-400">
+                    No {activeConnectionTab} connections yet.
+                  </p>
+                </div>
+              )}
+
+            {!connectionInboxLoading &&
+              !connectionInboxError &&
+              visibleConnections.length > 0 && (
+                <div className="mt-7 grid gap-3">
+                  {visibleConnections.map((connection) => {
+                    const otherMember = connection?.otherMember || {};
+
+                    const otherName =
+                      otherMember.fullName ||
+                      [otherMember.firstName, otherMember.lastName]
+                        .filter(Boolean)
+                        .join(" ") ||
+                      "Bridge Member";
+
+                    return (
+                      <button
+                        type="button"
+                        key={connection.connectionRecordId}
+                        onClick={() => setSelectedConnection(connection)}
+                        className={`
+    flex
+    w-full
+    items-center
+    gap-4
+    rounded-[26px]
+    border
+    p-5
+    text-left
+    transition
+    hover:shadow-md
+    ${
+      connection.unread
+        ? "border-blue-200 bg-blue-50 shadow-sm"
+        : "border-slate-100 bg-slate-50/60 hover:bg-white"
+    }
+  `}
+                      >
+                        <div
+                          className="
+      flex
+      h-14
+      w-14
+      shrink-0
+      items-center
+      justify-center
+      overflow-hidden
+      rounded-2xl
+      font-black
+      text-white
+    "
+                          style={{
+                            background: `linear-gradient(
+        135deg,
+        ${primary},
+        ${secondary}
+      )`,
+                          }}
+                        >
+                          {otherMember.profilePhoto ? (
+                            <img
+                              src={otherMember.profilePhoto}
+                              alt={otherName}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            getInitials(otherName)
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p
+                              className="text-lg font-black"
+                              style={{
+                                color: primary,
+                              }}
+                            >
+                              {otherName}
+                            </p>
+
+                            {connection.unread && (
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-600" />
+                            )}
+                          </div>
+
+                          {(otherMember.role ||
+                            otherMember.businessOrganization) && (
+                            <p className="mt-1 text-sm font-semibold text-slate-500">
+                              {otherMember.role}
+
+                              {otherMember.role &&
+                              otherMember.businessOrganization
+                                ? " · "
+                                : ""}
+
+                              {otherMember.businessOrganization}
+                            </p>
+                          )}
+
+                          <p className="mt-2 text-sm font-semibold text-slate-600">
+                            {connection.connectionReason}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                          {connection.unread && (
+                            <span
+                              className="
+          rounded-full
+          bg-blue-600
+          px-3
+          py-2
+          text-[10px]
+          font-black
+          uppercase
+          tracking-[0.12em]
+          text-white
+        "
+                            >
+                              New
+                            </span>
+                          )}
+
+                          <span
+                            className="
+        rounded-full
+        px-3
+        py-2
+        text-[10px]
+        font-black
+        uppercase
+        tracking-[0.12em]
+      "
+                            style={{
+                              color:
+                                connection.connectionStatus === "Pending"
+                                  ? "#92400e"
+                                  : primary,
+
+                              backgroundColor:
+                                connection.connectionStatus === "Pending"
+                                  ? "#fef3c7"
+                                  : `${secondary}12`,
+                            }}
+                          >
+                            {connection.connectionStatus}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
           </GlassCard>
         </Reveal>
       </section>

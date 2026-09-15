@@ -6,6 +6,7 @@ import FloatingScene from "./components/FloatingScene";
 import InterestManager from "./components/InterestManager";
 import LocalDirectory from "./components/LocalDirectory";
 import ProfileEditor from "./components/ProfileEditor";
+import { BridgeMessages } from "./components/ProfileView";
 // import { Swiper, SwiperSlide } from "swiper/react";
 // import { Navigation as SwiperNavigation, Pagination } from "swiper/modules";
 
@@ -511,6 +512,8 @@ export default function PersonalizedRecommendationsPage() {
   const [friendEmail, setFriendEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
   const [showInterestModal, setShowInterestModal] = useState(false);
+  const [showMessagesPanel, setShowMessagesPanel] = useState(false);
+  const [unreadConnectionCount, setUnreadConnectionCount] = useState(0);
   useEffect(() => {
     let active = true;
 
@@ -700,6 +703,14 @@ export default function PersonalizedRecommendationsPage() {
       }}
     >
       <FloatingScene theme={profile.theme} />
+      <BridgeMessages
+        token={token}
+        theme={profile.theme}
+        showLauncher={false}
+        externalOpen={showMessagesPanel}
+        onExternalOpenChange={setShowMessagesPanel}
+        onUnreadCountChange={setUnreadConnectionCount}
+      />
 
       {showIntro && (
         <motion.div
@@ -1136,7 +1147,12 @@ export default function PersonalizedRecommendationsPage() {
       </section>
 
       {/* profile editor */}
-      <ProfileEditor initialData={rawData} theme={profile.theme} />
+      <ProfileEditor
+        initialData={rawData}
+        theme={profile.theme}
+        unreadConnectionCount={unreadConnectionCount}
+        onOpenMessages={() => setShowMessagesPanel(true)}
+      />
 
       {/* recommendations */}
       <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-12">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { createPortal } from "react-dom";
 
 const API_URL =
   "https://bridgeaz-recommendations-server.vercel.app/api/directory";
@@ -701,6 +702,20 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
 ]);
   const [showFollowOptions, setShowFollowOptions] = useState(false);
 
+  const [showConnectModal, setShowConnectModal] = useState(false);
+
+  const [connectionReason, setConnectionReason] = useState("Ask a question");
+
+  const [connectionMessage, setConnectionMessage] = useState("");
+
+  const [connectionSubmitting, setConnectionSubmitting] = useState(false);
+
+  const [connectionError, setConnectionError] = useState("");
+
+  const [connectionSent, setConnectionSent] = useState(false);
+
+  const [connectionAlreadyExists, setConnectionAlreadyExists] = useState(false);
+
   useEffect(() => {
     if (!viewerToken || !member?.profileMemberId) {
       return;
@@ -859,6 +874,76 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
     }
   }
 
+  async function handleConnectSubmit(event) {
+    event.preventDefault();
+
+    const cleanMessage = connectionMessage.trim();
+
+    if (
+      !viewerToken ||
+      !member?.profileMemberId ||
+      !connectionReason ||
+      !cleanMessage ||
+      connectionSubmitting
+    ) {
+      return;
+    }
+
+    try {
+      setConnectionSubmitting(true);
+      setConnectionError("");
+      setConnectionSent(false);
+      setConnectionAlreadyExists(false);
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/connect/send",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            requesterToken: viewerToken,
+            targetMemberRecordId: member.profileMemberId,
+            connectionReason,
+            message: cleanMessage,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(
+          result?.error || "Could not send your connection message.",
+        );
+      }
+
+      if (result?.existingConnection === true) {
+        setConnectionAlreadyExists(true);
+        return;
+      }
+
+      setConnectionMessage("");
+      setConnectionSent(true);
+
+      window.setTimeout(() => {
+        setConnectionSent(false);
+      }, 2500);
+    } catch (error) {
+      console.error("Connect send error:", error);
+
+      setConnectionError(
+        error?.message ||
+          "Could not send your connection message. Please try again.",
+      );
+    } finally {
+      setConnectionSubmitting(false);
+    }
+  }
+
   function toggleFollowContentType(type) {
     if (type === "Everything") {
       setSelectedFollowContentTypes(["Everything"]);
@@ -941,7 +1026,7 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
           duration-300
           hover:bg-slate-50/70
           md:px-7
-          xl:grid-cols-[minmax(300px,1.2fr)_minmax(300px,1.25fr)_minmax(210px,.75fr)_145px]
+       xl:grid-cols-[minmax(220px,1.15fr)_minmax(200px,1fr)_minmax(140px,.7fr)_220px]
           xl:items-center
         "
       >
@@ -1110,7 +1195,18 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
 
         {/* QUICK VIEW */}
 
-        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+        <div
+          className="
+    grid
+    w-full
+    grid-cols-2
+    gap-2
+    xl:w-[250px]
+    xl:justify-self-end
+  "
+        >
+          {/* FOLLOW */}
+
           <motion.button
             type="button"
             onClick={() => {
@@ -1138,18 +1234,18 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
                   }
             }
             className="
-    inline-flex
-    h-10
-    items-center
-    justify-center
-    rounded-full
-    border
-    px-4
-    text-xs
-    font-black
-    transition
-    disabled:cursor-default
-  "
+      inline-flex
+      h-10
+      items-center
+      justify-center
+      rounded-full
+      border
+      px-4
+      text-xs
+      font-black
+      transition
+      disabled:cursor-default
+    "
             style={{
               color: isFollowing ? "#047857" : theme.primary,
               borderColor: isFollowing ? "#A7F3D0" : `${theme.primary}33`,
@@ -1160,8 +1256,55 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
               ? "Updating..."
               : isFollowing
                 ? "Unfollow"
-                : "+ Follow"} 
+                : "+ Follow"}
           </motion.button>
+
+          {/* CONNECT */}
+
+          <motion.button
+            type="button"
+            onClick={() => {
+              setConnectionError("");
+              setConnectionSent(false);
+              setConnectionAlreadyExists(false);
+              setShowConnectModal(true);
+            }}
+            disabled={!viewerToken || !member?.profileMemberId}
+            whileHover={{
+              y: -2,
+            }}
+            whileTap={{
+              scale: 0.97,
+            }}
+            className="
+      inline-flex
+      h-10
+      items-center
+      justify-center
+      rounded-full
+      border
+      px-4
+      text-xs
+      font-black
+      transition
+      disabled:cursor-not-allowed
+      disabled:opacity-40
+    "
+            style={{
+              color: "#FFFFFF",
+              borderColor: theme.primary,
+              background: `linear-gradient(
+        135deg,
+        ${theme.primary},
+        ${theme.secondary}
+      )`,
+            }}
+          >
+            Connect
+          </motion.button>
+
+          {/* QUICK VIEW */}
+
           <motion.button
             type="button"
             onClick={onToggle}
@@ -1173,24 +1316,25 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
               scale: 0.97,
             }}
             className="
-              inline-flex
-              h-10
-              items-center
-              justify-center
-              gap-2
-              rounded-full
-              px-5
-              text-xs
-              font-black
-              text-white
-              shadow-[0_10px_24px_rgba(47,102,208,.18)]
-            "
+      col-span-2
+      inline-flex
+      h-10
+      items-center
+      justify-center
+      gap-2
+      rounded-full
+      px-5
+      text-xs
+      font-black
+      text-white
+      shadow-[0_10px_24px_rgba(47,102,208,.18)]
+    "
             style={{
               background: `linear-gradient(
-                135deg,
-                ${theme.primary},
-                ${theme.primary}DD
-              )`,
+        135deg,
+        ${theme.primary},
+        ${theme.primary}DD
+      )`,
             }}
           >
             {expanded ? "Close" : "Quick View"}
@@ -1979,6 +2123,349 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
           </motion.div>
         )}
       </AnimatePresence>
+      {showConnectModal &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="
+        fixed
+        inset-0
+        z-[20000]
+        flex
+        items-center
+        justify-center
+        bg-slate-950/50
+        p-4
+        backdrop-blur-sm
+      "
+            onClick={() => {
+              if (!connectionSubmitting) {
+                setShowConnectModal(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{
+                opacity: 0,
+                scale: 0.95,
+                y: 20,
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                y: 0,
+              }}
+              onClick={(event) => event.stopPropagation()}
+              className="
+          max-h-[90vh]
+          w-full
+          max-w-xl
+          overflow-y-auto
+          rounded-[30px]
+          bg-white
+          shadow-[0_35px_120px_rgba(15,23,42,.30)]
+        "
+            >
+              {/* HEADER */}
+
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+                <div>
+                  <p
+                    className="text-[9px] font-black uppercase tracking-[0.18em]"
+                    style={{
+                      color: theme.secondary,
+                    }}
+                  >
+                    Bridge Connect
+                  </p>
+
+                  <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#071A4A]">
+                    Connect with {name}
+                  </h2>
+
+                  <p className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                    Tell {name} why you'd like to connect.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={connectionSubmitting}
+                  onClick={() => setShowConnectModal(false)}
+                  className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              bg-slate-100
+              text-lg
+              font-black
+              text-slate-500
+              transition
+              hover:bg-slate-200
+              disabled:opacity-50
+            "
+                >
+                  ×
+                </button>
+              </div>
+
+              <form onSubmit={handleConnectSubmit} className="p-6">
+                {/* EXISTING CONVERSATION */}
+
+                {connectionAlreadyExists ? (
+                  <div
+                    className="
+                rounded-[22px]
+                border
+                border-blue-100
+                bg-blue-50
+                p-5
+              "
+                  >
+                    <p className="text-base font-black text-blue-900">
+                      Conversation already open
+                    </p>
+
+                    <p className="mt-2 text-sm font-medium leading-6 text-blue-700">
+                      You already have an active Bridge conversation with {name}
+                      . Continue that conversation from your Bridge Connections
+                      section.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowConnectModal(false)}
+                      className="
+                  mt-4
+                  rounded-full
+                  bg-white
+                  px-5
+                  py-2.5
+                  text-xs
+                  font-black
+                  text-blue-800
+                  shadow-sm
+                "
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* SENT CONFIRMATION */}
+
+                    {connectionSent && (
+                      <motion.div
+                        initial={{
+                          opacity: 0,
+                          y: 8,
+                          scale: 0.96,
+                        }}
+                        animate={{
+                          opacity: 1,
+                          y: 0,
+                          scale: 1,
+                        }}
+                        className="
+                    mb-5
+                    flex
+                    items-center
+                    gap-3
+                    rounded-[20px]
+                    bg-emerald-50
+                    px-4
+                    py-4
+                    text-sm
+                    font-black
+                    text-emerald-700
+                  "
+                      >
+                        <span
+                          className="
+                      flex
+                      h-7
+                      w-7
+                      items-center
+                      justify-center
+                      rounded-full
+                      bg-emerald-500
+                      text-white
+                    "
+                        >
+                          ✓
+                        </span>
+                        Connection message sent
+                      </motion.div>
+                    )}
+
+                    {/* REASON */}
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                        Why are you connecting?
+                      </label>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {[
+                          "Ask a question",
+                          "Learn about their services",
+                          "Invite them to speak",
+                          "Collaborate",
+                          "Request a meeting",
+                          "Discuss a resource",
+                          "Invite them to an event",
+                          "Explore another opportunity",
+                        ].map((reason) => {
+                          const selected = connectionReason === reason;
+
+                          return (
+                            <button
+                              key={reason}
+                              type="button"
+                              disabled={connectionSubmitting}
+                              onClick={() => setConnectionReason(reason)}
+                              className="
+                          rounded-full
+                          border
+                          px-4
+                          py-2.5
+                          text-xs
+                          font-black
+                          transition
+                          disabled:opacity-50
+                        "
+                              style={{
+                                color: selected ? "#FFFFFF" : theme.primary,
+                                backgroundColor: selected
+                                  ? theme.primary
+                                  : "#FFFFFF",
+                                borderColor: selected
+                                  ? theme.primary
+                                  : "#E2E8F0",
+                              }}
+                            >
+                              {selected ? "✓ " : ""}
+                              {reason}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* MESSAGE */}
+
+                    <div className="mt-6">
+                      <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                        Your message
+                      </label>
+
+                      <textarea
+                        value={connectionMessage}
+                        onChange={(event) => {
+                          setConnectionMessage(event.target.value);
+
+                          if (connectionError) {
+                            setConnectionError("");
+                          }
+
+                          if (connectionSent) {
+                            setConnectionSent(false);
+                          }
+                        }}
+                        rows={5}
+                        maxLength={4000}
+                        disabled={connectionSubmitting}
+                        placeholder={`Write a message to ${name}...`}
+                        className="
+                    mt-3
+                    w-full
+                    resize-y
+                    rounded-[22px]
+                    border
+                    border-slate-200
+                    bg-slate-50/60
+                    px-5
+                    py-4
+                    text-sm
+                    font-medium
+                    leading-7
+                    text-slate-700
+                    outline-none
+                    transition
+                    placeholder:text-slate-300
+                    focus:border-blue-300
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-blue-50
+                    disabled:opacity-60
+                  "
+                      />
+
+                      <div className="mt-2 flex items-center justify-between gap-4">
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          {connectionMessage.length}/4000
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* ERROR */}
+
+                    {connectionError && (
+                      <div className="mt-4 rounded-[18px] bg-rose-50 px-4 py-3">
+                        <p className="text-sm font-bold text-rose-700">
+                          {connectionError}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* SEND */}
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={
+                          connectionSubmitting ||
+                          !connectionMessage.trim() ||
+                          !connectionReason
+                        }
+                        className="
+                    rounded-full
+                    px-7
+                    py-3.5
+                    text-sm
+                    font-black
+                    text-white
+                    shadow-lg
+                    transition
+                    hover:-translate-y-0.5
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    disabled:hover:translate-y-0
+                  "
+                        style={{
+                          background: `linear-gradient(
+                      135deg,
+                      ${theme.primary},
+                      ${theme.secondary}
+                    )`,
+                        }}
+                      >
+                        {connectionSubmitting
+                          ? "Sending..."
+                          : "Send Connection Message"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </form>
+            </motion.div>
+          </div>,
+          document.body,
+        )}
     </motion.article>
   );
 }
@@ -2649,7 +3136,7 @@ export default function LocalDirectory({ theme: suppliedTheme, viewerToken }) {
             <div
               className="
                   hidden
-                  grid-cols-[minmax(300px,1.2fr)_minmax(300px,1.25fr)_minmax(210px,.75fr)_145px]
+             xl:grid-cols-[minmax(220px,1.15fr)_minmax(200px,1fr)_minmax(150px,.7fr)_220px]
                   gap-5
                   border-b
                   border-slate-100
@@ -2841,19 +3328,19 @@ export default function LocalDirectory({ theme: suppliedTheme, viewerToken }) {
                   }-${index}`;
 
                   return (
-                 <MemberRow
-  key={memberKey}
-  member={member}
-  theme={theme}
-  index={index}
-  expanded={expandedMember === memberKey}
-  onToggle={() =>
-    setExpandedMember((current) =>
-      current === memberKey ? null : memberKey,
-    )
-  }
-  viewerToken={viewerToken}
-/>
+                    <MemberRow
+                      key={memberKey}
+                      member={member}
+                      theme={theme}
+                      index={index}
+                      expanded={expandedMember === memberKey}
+                      onToggle={() =>
+                        setExpandedMember((current) =>
+                          current === memberKey ? null : memberKey,
+                        )
+                      }
+                      viewerToken={viewerToken}
+                    />
                   );
                 })}
               </motion.div>

@@ -756,7 +756,13 @@ function OptionGrid({ options, selected, onToggle, disabled = false }) {
    MAIN
 ------------------------------------------------------- */
 
-export default function ProfileEditor({ initialData, theme, onProfileSaved }) {
+export default function ProfileEditor({
+  initialData,
+  theme,
+  onProfileSaved,
+  unreadConnectionCount = 0,
+  onOpenMessages,
+}) {
   const { token } = useParams();
 
   const menuRef = useRef(null);
@@ -1497,14 +1503,92 @@ export default function ProfileEditor({ initialData, theme, onProfileSaved }) {
       <div
         ref={menuRef}
         className="
-          fixed
-          right-4
-          top-14
-          z-[9000]
-          md:right-7
-          md:top-15
-        "
+    fixed
+    right-4
+    top-14
+    z-9000
+    flex
+    items-start
+    gap-2
+    md:right-7
+    md:top-15
+  "
       >
+        <motion.button
+          type="button"
+          onClick={() => {
+            setMenuOpen(false);
+            onOpenMessages?.();
+          }}
+          whileHover={{
+            y: -3,
+            scale: 1.05,
+          }}
+          whileTap={{
+            scale: 0.95,
+          }}
+          aria-label="Open Bridge messages"
+          className="
+    relative
+    flex
+    h-14
+    w-14
+    shrink-0
+    items-center
+    justify-center
+    rounded-full
+    border
+    border-white/80
+    bg-white/78
+    text-[#071A4A]
+    shadow-[0_20px_60px_rgba(7,26,74,0.18)]
+    backdrop-blur-2xl
+    transition-all
+    duration-300
+    hover:bg-white/95
+    hover:shadow-[0_28px_80px_rgba(7,26,74,0.24)]
+    md:h-[60px]
+    md:w-[60px]
+  "
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-6 w-6"
+          >
+            <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+          </svg>
+
+          {unreadConnectionCount > 0 && (
+            <span
+              className="
+        absolute
+        -right-1
+        -top-1
+        flex
+        min-h-6
+        min-w-6
+        items-center
+        justify-center
+        rounded-full
+        border-2
+        border-white
+        bg-rose-500
+        px-1.5
+        text-[10px]
+        font-black
+        text-white
+        shadow-lg
+      "
+            >
+              {unreadConnectionCount > 99 ? "99+" : unreadConnectionCount}
+            </span>
+          )}
+        </motion.button>
         <motion.button
           type="button"
           onClick={handleAvatarClick}

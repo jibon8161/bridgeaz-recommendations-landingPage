@@ -1,12 +1,15 @@
 // import { formatInTimeZone } from "date-fns-tz";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import FloatingScene from "./components/FloatingScene";
 import InterestManager from "./components/InterestManager";
 import LocalDirectory from "./components/LocalDirectory";
 import ProfileEditor from "./components/ProfileEditor";
 import { BridgeMessages } from "./components/ProfileView";
+
 // import { Swiper, SwiperSlide } from "swiper/react";
 // import { Navigation as SwiperNavigation, Pagination } from "swiper/modules";
 
@@ -340,7 +343,7 @@ function RecommendationCard({ item, theme, index }) {
           <div className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 skew-x-[-18deg] bg-white/30 opacity-0 transition-all duration-700 group-hover:left-[120%] group-hover:opacity-100" />
 
           {/* type badge */}
-          <div className="absolute left-4 top-4">
+          <div className="absolute left-4 top-4 flex flex-col items-start gap-2">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/95 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#071A4A] shadow-[0_12px_28px_rgba(7,26,74,0.16)] backdrop-blur-md">
               <span
                 className="h-1.5 w-1.5 rounded-full"
@@ -348,6 +351,12 @@ function RecommendationCard({ item, theme, index }) {
               />
               {item?.type || "Local Pick"}
             </span>
+
+            {item?.isFollowedSubmission && item?.followedMemberName && (
+              <span className="rounded-full border border-white/40 bg-[#071A4A]/90 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg backdrop-blur-md">
+                From {item.followedMemberName}
+              </span>
+            )}
           </div>
 
           {/* date */}
@@ -501,6 +510,12 @@ const fakeNames = [
 
 export default function PersonalizedRecommendationsPage() {
   const { token } = useParams();
+  const navigate = useNavigate();
+
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [accessAllowed, setAccessAllowed] = useState(false);
+
+  const autoProfileProcessStartedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [rawData, setRawData] = useState(null);
@@ -514,7 +529,65 @@ export default function PersonalizedRecommendationsPage() {
   const [showInterestModal, setShowInterestModal] = useState(false);
   const [showMessagesPanel, setShowMessagesPanel] = useState(false);
   const [unreadConnectionCount, setUnreadConnectionCount] = useState(0);
+
+useEffect(() => {
+  let active = true;
+
+  const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    if (!active) return;
+
+    if (!firebaseUser) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    try {
+      const idToken = await firebaseUser.getIdToken();
+
+      const response = await fetch(
+        `https://bridgeaz-recommendations-server.vercel.app/api/auth/my-bridge-access/${encodeURIComponent(
+          token,
+        )}`,
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      console.log("MY BRIDGE ACCESS:", data);
+
+      if (!active) return;
+
+      if (response.ok && data.allowed === true) {
+        setAccessAllowed(true);
+        setAccessChecked(true);
+      } else {
+        setAccessAllowed(false);
+        setAccessChecked(true);
+        navigate("/", { replace: true });
+      }
+    } catch (error) {
+      console.error("My Bridge access check failed:", error);
+
+      if (active) {
+        setAccessAllowed(false);
+        setAccessChecked(true);
+        navigate("/", { replace: true });
+      }
+    }
+  });
+
+  return () => {
+    active = false;
+    unsubscribe();
+  };
+}, [token, navigate]);
+
   useEffect(() => {
+    if (!accessAllowed) return;
     let active = true;
 
     async function fetchRecommendations() {
@@ -524,9 +597,9 @@ export default function PersonalizedRecommendationsPage() {
         const cacheKey = `recommendations-${token}`;
         const cached = sessionStorage.getItem(cacheKey);
 
-    if (cached) {
-      setRawData(JSON.parse(cached));
-    }
+        if (cached) {
+          setRawData(JSON.parse(cached));
+        }
 
         const response = await fetch(`${API_BASE}/${token}`);
         const text = await response.text();
@@ -558,7 +631,114 @@ export default function PersonalizedRecommendationsPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, accessAllowed]);
+
+useEffect(() => {
+  if (autoProfileProcessStartedRef.current || !token || !rawData) {
+    return;
+  }
+
+  async function autoTriggerProfileUpdate() {
+    try {
+      // Check submissions first
+      const contributionResponse = await fetch(
+        `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+          token,
+        )}/contributions`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+
+      const contributionResult = await contributionResponse.json();
+
+      if (!contributionResponse.ok) {
+        throw new Error(
+          contributionResult?.error || "Could not check submissions.",
+        );
+      }
+
+      const realSubmissions = Array.isArray(contributionResult?.contributions)
+        ? contributionResult.contributions.filter((item) =>
+            Boolean(item?.recordId),
+          )
+        : [];
+
+      console.log(
+        "REAL SUBMISSIONS FOUND:",
+        realSubmissions.length,
+        realSubmissions,
+      );
+
+      // No real Airtable submission = stop here
+      if (realSubmissions.length === 0) {
+        console.log("AUTO PROFILE UPDATE SKIPPED - NO SUBMISSIONS");
+        return;
+      }
+
+      autoProfileProcessStartedRef.current = true;
+
+      // Same working PATCH as Save Profile
+      const response = await fetch(
+        `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+          token,
+        )}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            profileBio: rawData?.profileBio || "",
+            profileStatus: rawData?.profileStatus || "",
+
+            website: rawData?.website || "",
+            expertise: rawData?.expertise || "",
+            socialLinks: rawData?.socialLinks || "",
+            additionalAffiliations: rawData?.additionalAffiliations || "",
+
+            promoteMePersonally: rawData?.promoteMePersonally === true,
+
+            promoteMyBusinessOrganization:
+              rawData?.promoteMyBusinessOrganization === true,
+
+            whatIWantBridgeToPromote: rawData?.whatIWantBridgeToPromote || "",
+
+            openToOpportunities: rawData?.openToOpportunities === true,
+
+            opportunityTypes: rawData?.opportunityTypes || "",
+
+            showEmailInDirectory: rawData?.showEmailInDirectory === true,
+
+            showPhoneInDirectory: rawData?.showPhoneInDirectory === true,
+
+            showSocialLinksInDirectory:
+              rawData?.showSocialLinksInDirectory === true,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(
+          result?.details ||
+            result?.error ||
+            "Automatic profile update failed.",
+        );
+      }
+
+      console.log("PROFILE UPDATE WEBHOOK AUTO TRIGGERED");
+    } catch (error) {
+      console.error("AUTO PROFILE UPDATE ERROR:", error);
+
+      autoProfileProcessStartedRef.current = false;
+    }
+  }
+
+  void autoTriggerProfileUpdate();
+}, [token, rawData]);
 
   const profile = useMemo(() => {
     if (!rawData) return null;
@@ -581,13 +761,41 @@ export default function PersonalizedRecommendationsPage() {
   //     moodMotionMap[profile?.theme?.mood || "professional"] ||
   //     moodMotionMap.professional;
 
-  if (loading) return <LoadingScreen />;
+  // loading && console.log("LOADING RECOMMENDATIONS...");
+
+if (!accessChecked || !accessAllowed || loading) {
+  return <LoadingScreen />;
+}
 
   if (!profile) return <ErrorState />;
 
   const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
 
   const allFutureItems = rawData?.recommendations?.allFutureItems || [];
+
+  const followedSubmissions = Array.isArray(rawData?.followedSubmissions)
+    ? rawData.followedSubmissions
+    : [];
+
+  const followedCommunityItems = followedSubmissions.map((item) => ({
+    type: "submission",
+    title: item.title || "",
+    details: item.summary || item.shortDescription || "",
+    date: item.startDateTime
+      ? new Date(item.startDateTime).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "",
+    rawDate: item.startDateTime || "",
+    location: item.eventLocation || "",
+    link: item.link || "",
+    imageUrl: "",
+    submissionType: item.submissionType || "",
+    followedMemberName: item.followedMemberName || "",
+    isFollowedSubmission: true,
+  }));
 
   const selectedBaseItems = showAllFuture ? allFutureItems : next14DaysItems;
 
@@ -625,13 +833,35 @@ export default function PersonalizedRecommendationsPage() {
       ? allFutureItems
       : filteredItems;
 
-  const allCommunityItems = communityBaseItems.filter((item) => {
-    return item.type?.toLowerCase().trim() === "submission";
-  });
+const filteredFollowedCommunityItems = followedCommunityItems.filter((item) => {
+  if (showAllFuture) return true;
+  if (!item.rawDate) return false;
 
-  const allFutureCommunityItems = allFutureItems.filter((item) => {
+  const itemUTC = getUTCDateOnly(item.rawDate);
+
+  return itemUTC >= todayUTC && itemUTC <= endUTC;
+});
+
+const followedCommunityBaseItems =
+  activeSection === "hub" &&
+  communityFilter !== "all" &&
+  communityFilter !== "An activity, event, class, or opportunity"
+    ? followedCommunityItems
+    : filteredFollowedCommunityItems;
+
+const allCommunityItems = [
+  ...communityBaseItems.filter((item) => {
     return item.type?.toLowerCase().trim() === "submission";
-  });
+  }),
+  ...followedCommunityBaseItems,
+];
+
+const allFutureCommunityItems = [
+  ...allFutureItems.filter((item) => {
+    return item.type?.toLowerCase().trim() === "submission";
+  }),
+  ...followedCommunityItems,
+];
 
   const communityCategories = [
     // "all",
@@ -887,12 +1117,23 @@ export default function PersonalizedRecommendationsPage() {
       </div>
 
       {/* top bar */}
+      {/* top bar */}
       <div
-        className="relative z-10 px-6 py-3 text-white"
+        className="relative z-10 px-4 py-2 text-white"
         style={{ backgroundColor: profile.theme.primary }}
       >
-        <div className="mx-auto flex max-w-6xl items-center justify-between text-sm">
-          <span>Prescott, Arizona</span>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 text-sm">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex cursor-pointer items-center gap-2 rounded-full bg-white/15 px-4 py-2 font-black transition hover:bg-white/25"
+          >
+            <span>←</span>
+            <span>Home</span>
+          </button>
+
+          <span className="hidden sm:block">Prescott, Arizona</span>
+
           <span>connect@bridgeaz.co</span>
         </div>
       </div>
@@ -1166,37 +1407,93 @@ export default function PersonalizedRecommendationsPage() {
               Selected For You
             </h2>
 
-            <div className="mt-6 inline-flex rounded-full border bg-white p-1 shadow-lg">
+            <div className="mt-7 flex flex-wrap gap-5">
+              {/* Local Events */}
               <button
                 type="button"
                 onClick={() => setActiveSection("events")}
-                className="rounded-full px-5 py-2.5 text-sm font-black transition"
-                style={{
-                  backgroundColor:
-                    activeSection === "events"
-                      ? profile.theme.primary
-                      : "transparent",
-                  color:
-                    activeSection === "events" ? "#fff" : profile.theme.primary,
-                }}
+                className="group relative inline-block p-2 transition-transform duration-200 hover:-translate-y-1"
               >
-                Activities
+                <span
+                  className="relative z-10 block overflow-hidden rounded-lg border-2 px-7 py-3 text-lg font-black leading-tight transition-colors duration-300 ease-out group-hover:text-white group-hover:shadow-xl"
+                  style={{
+                    borderColor:
+                      activeSection === "events"
+                        ? profile.theme.primary
+                        : "#071A4A",
+                    color:
+                      activeSection === "events"
+                        ? profile.theme.primary
+                        : "#071A4A",
+                  }}
+                >
+                  {/* White background */}
+                  <span className="absolute inset-0 h-full w-full rounded-lg bg-white" />
+
+                  {/* Animated gradient hover */}
+                  <span
+                    className="absolute left-1/2 top-1/2 h-80 w-80 translate-x-[140%] -translate-y-1/2 -rotate-90 rounded-full transition-all duration-500 ease-out group-hover:-translate-x-1/2 group-hover:-rotate-180"
+                    style={{
+                      background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
+                    }}
+                  />
+
+                  <span className="relative z-10">Local Events</span>
+                </span>
+
+                {/* Selected indicator */}
+                {activeSection === "events" && (
+                  <span
+                    className="absolute bottom-0 right-0 h-12 w-full -mb-1 -mr-1 rounded-lg transition-all duration-200 ease-linear group-hover:mb-0 group-hover:mr-0"
+                    style={{
+                      background: profile.theme.primary,
+                    }}
+                  />
+                )}
               </button>
 
+              {/* Community Hub */}
               <button
                 type="button"
                 onClick={() => setActiveSection("hub")}
-                className="rounded-full px-5 py-2.5 text-sm font-black transition"
-                style={{
-                  backgroundColor:
-                    activeSection === "hub"
-                      ? profile.theme.primary
-                      : "transparent",
-                  color:
-                    activeSection === "hub" ? "#fff" : profile.theme.primary,
-                }}
+                className="group relative inline-block p-2 transition-transform duration-200 hover:-translate-y-1"
               >
-                Community Hub
+                <span
+                  className="relative z-10 block overflow-hidden rounded-lg border-2 px-7 py-3 text-lg font-black leading-tight transition-colors duration-300 ease-out group-hover:text-white group-hover:shadow-xl"
+                  style={{
+                    borderColor:
+                      activeSection === "hub"
+                        ? profile.theme.primary
+                        : "#071A4A",
+                    color:
+                      activeSection === "hub"
+                        ? profile.theme.primary
+                        : "#071A4A",
+                  }}
+                >
+                  {/* White background */}
+                  <span className="absolute inset-0 h-full w-full rounded-lg bg-white" />
+
+                  {/* Animated gradient hover */}
+                  <span
+                    className="absolute left-1/2 top-1/2 h-80 w-80 translate-x-[140%] -translate-y-1/2 -rotate-90 rounded-full transition-all duration-500 ease-out group-hover:-translate-x-1/2 group-hover:-rotate-180"
+                    style={{
+                      background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
+                    }}
+                  />
+
+                  <span className="relative z-10">Community Hub</span>
+                </span>
+
+                {/* Selected indicator */}
+                {activeSection === "hub" && (
+                  <span
+                    className="absolute bottom-0 right-0 h-12 w-full -mb-1 -mr-1 rounded-lg transition-all duration-200 ease-linear group-hover:mb-0 group-hover:mr-0"
+                    style={{
+                      background: profile.theme.primary,
+                    }}
+                  />
+                )}
               </button>
             </div>
 
@@ -1350,7 +1647,9 @@ export default function PersonalizedRecommendationsPage() {
               />
             </div>
             {activeSection === "hub" && (
-              <LocalDirectory theme={profile.theme} viewerToken={token} />
+              <div className="mt-10">
+                <LocalDirectory theme={profile.theme} viewerToken={token} />
+              </div>
             )}
           </div>
         </div>

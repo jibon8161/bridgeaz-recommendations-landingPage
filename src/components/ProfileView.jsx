@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 
 import FloatingScene from "./FloatingScene";
-import ProfileWeather from "./ProfileWeather";
+
+import InterestManager from "./InterestManager";
+import ProfileRecommendations from "./ProfileRecommendations";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
@@ -196,107 +198,18 @@ function getSocialInfo(item) {
   };
 }
 
-function cleanContributionLink(value) {
-  if (!value) return "";
 
-  const text = String(value).trim();
 
-  const markdownLink = text.match(
-    /^\[(https?:\/\/[^\]]+)\]\((https?:\/\/[^)]+)\)$/,
-  );
 
-  if (markdownLink) {
-    return markdownLink[2];
-  }
 
-  if (/^https?:\/\//i.test(text)) {
-    return text;
-  }
-
-  return "";
-}
-
-function getContributionCategory(item) {
-  const value = [item?.submissionType, item?.title, item?.originalTitle]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  if (value.includes("event") || value.includes("activity")) {
-    return "Events";
-  }
-
-  if (
-    value.includes("class") ||
-    value.includes("workshop") ||
-    value.includes("course")
-  ) {
-    return "Classes & Workshops";
-  }
-
-  if (value.includes("book") || value.includes("ebook")) {
-    return "Books";
-  }
-
-  if (value.includes("opportunity") || value.includes("program")) {
-    return "Opportunities";
-  }
-
-  if (
-    value.includes("resource") ||
-    value.includes("tip") ||
-    value.includes("guide") ||
-    value.includes("pdf") ||
-    value.includes("video") ||
-    value.includes("link")
-  ) {
-    return "Resources";
-  }
-
-  if (
-    value.includes("article") ||
-    value.includes("story") ||
-    value.includes("news")
-  ) {
-    return "Articles";
-  }
-
-  return "Contributions";
-}
-
-function getCategoryIcon(category) {
-  switch (category) {
-    case "Articles":
-      return "✎";
-
-    case "Events":
-      return "◷";
-
-    case "Resources":
-      return "◇";
-
-    case "Classes & Workshops":
-      return "▣";
-
-    case "Books":
-      return "▤";
-
-    case "Opportunities":
-      return "↗";
-
-    default:
-      return "✦";
-  }
-}
 
 function sortContributionDate(item) {
-  const value = item?.submittedDate || item?.startDate || "";
+  const value = item?.submittedDate || item?.["Submitted Date"] || "";
 
   const timestamp = new Date(value).getTime();
 
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
-
 /* =======================================================
    REVEAL ANIMATION
 ======================================================= */
@@ -373,6 +286,196 @@ function Eyebrow({ children, secondary, light = false }) {
   );
 }
 
+
+/* =======================================================
+   LIMITED HOVER HELP
+   Max 3 times per rolling 24 hours
+======================================================= */
+
+function LimitedHoverHelp({
+  children,
+  helpText,
+  storageKey,
+  maxViews = 3,
+  secondary = "#3B82F6",
+}) {
+  const STORAGE_KEY = `bridge_hover_help_${storageKey}`;
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+  const getRecentViews = () => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+
+      if (!saved) {
+        return [];
+      }
+
+      const parsed = JSON.parse(saved);
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      const now = Date.now();
+
+      return parsed.filter(
+        (timestamp) =>
+          typeof timestamp === "number" && now - timestamp < TWENTY_FOUR_HOURS,
+      );
+    } catch {
+      return [];
+    }
+  };
+
+  const [viewHistory, setViewHistory] = useState(getRecentViews);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const canShow = viewHistory.length < maxViews;
+
+  const handleMouseEnter = () => {
+    const recentViews = getRecentViews();
+
+    if (recentViews.length >= maxViews) {
+      setViewHistory(recentViews);
+      return;
+    }
+
+    const nextViews = [...recentViews, Date.now()];
+
+    setViewHistory(nextViews);
+    setShowHelp(true);
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextViews));
+    } catch {
+      // Ignore localStorage errors.
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setShowHelp(false);
+  };
+
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <span
+        className={`
+          inline-flex
+          cursor-help
+          items-center
+          gap-1.5
+          ${canShow ? "border-b border-dashed" : ""}
+        `}
+        style={{
+          borderColor: canShow ? `${secondary}80` : "transparent",
+        }}
+      >
+        {children}
+
+        {canShow && (
+          <span
+            className="
+              inline-flex
+              h-4
+              w-4
+              items-center
+              justify-center
+              rounded-full
+              text-[10px]
+              font-black
+            "
+            style={{
+              color: secondary,
+              backgroundColor: `${secondary}12`,
+            }}
+          >
+            ?
+          </span>
+        )}
+      </span>
+
+      {showHelp && (
+        <motion.div
+          initial={{
+            opacity: 0,
+            y: 5,
+            scale: 0.97,
+          }}
+          animate={{
+            opacity: 1,
+            y: 0,
+            scale: 1,
+          }}
+          className="
+    absolute
+    left-0
+    top-[calc(100%+10px)]
+    z-[20000]
+    w-[300px]
+    rounded-2xl
+    border
+    border-slate-200
+    bg-white
+    p-4
+    text-left
+    normal-case
+    tracking-normal
+    shadow-[0_18px_55px_rgba(15,23,42,.18)]
+  "
+        >
+          <div
+            className="
+              absolute
+              -top-1.5
+              left-5
+              h-3
+              w-3
+              rotate-45
+              border-l
+              border-t
+              border-slate-200
+              bg-white
+            "
+          />
+
+          <p
+            className="
+              relative
+              text-sm
+              font-semibold
+              leading-6
+              text-slate-600
+            "
+          >
+            {helpText}
+          </p>
+
+          <p
+            className="
+              relative
+              mt-2
+              text-[10px]
+              font-black
+              uppercase
+              tracking-[0.08em]
+              text-slate-400
+            "
+          >
+            Helpful tip
+          </p>
+        </motion.div>
+      )}
+    </span>
+  );
+}
 /* =======================================================
    GLASS CARD
 ======================================================= */
@@ -417,8 +520,8 @@ function PremiumAvatar({ profilePhoto, fullName, primary, secondary }) {
       className="
         relative
         mx-auto
-        h-[270px]
-        w-[270px]
+        h-67.5
+        w-67.5
         lg:mx-0
       "
     >
@@ -968,257 +1071,7 @@ function ContactCard({ label, value, href, icon, primary, secondary }) {
    CONTRIBUTION CARD
 ======================================================= */
 
-function ContributionCard({ contribution, primary, secondary, index }) {
-  const category = getContributionCategory(contribution);
 
-  const icon = getCategoryIcon(category);
-
-  const title =
-    contribution?.title || contribution?.originalTitle || "Bridge Contribution";
-
-  const description = contribution?.summary || contribution?.description || "";
-
-  const link = cleanContributionLink(contribution?.link);
-
-  const displayDate =
-    category === "Events"
-      ? contribution?.startDate || contribution?.submittedDate
-      : contribution?.submittedDate;
-
-  const formattedDate = formatContributionDate(displayDate);
-
-  return (
-    <motion.article
-      initial={{
-        opacity: 0,
-        x: -26,
-        y: 18,
-      }}
-      whileInView={{
-        opacity: 1,
-        x: 0,
-        y: 0,
-      }}
-      viewport={{
-        once: true,
-        amount: 0.08,
-      }}
-      transition={{
-        delay: Math.min(index * 0.04, 0.25),
-        duration: 0.55,
-      }}
-      whileHover={{
-        y: -3,
-      }}
-      className="
-        group
-        relative
-        grid
-        gap-5
-        overflow-hidden
-        rounded-[30px]
-        border
-        border-slate-100
-        bg-white/72
-        p-5
-        shadow-[0_12px_40px_rgba(15,23,42,.045)]
-        backdrop-blur-xl
-        transition
-        hover:border-blue-100
-        hover:bg-white
-        hover:shadow-[0_22px_65px_rgba(15,23,42,.08)]
-        md:grid-cols-[64px_minmax(0,1fr)_auto]
-        md:p-6
-      "
-    >
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -right-20
-          -top-20
-          h-40
-          w-40
-          rounded-full
-          opacity-0
-          blur-3xl
-          transition
-          duration-500
-          group-hover:opacity-100
-        "
-        style={{
-          backgroundColor: `${secondary}12`,
-        }}
-      />
-
-      <motion.div
-        whileHover={{
-          rotate: 8,
-          scale: 1.08,
-        }}
-        className="
-          relative
-          z-10
-          flex
-          h-14
-          w-14
-          items-center
-          justify-center
-          rounded-[18px]
-          border
-          border-white
-          bg-white
-          text-xl
-          font-black
-          shadow-[0_12px_30px_rgba(15,23,42,.08)]
-        "
-        style={{
-          color: primary,
-        }}
-      >
-        {icon}
-      </motion.div>
-
-      <div className="relative z-10 min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className="
-              rounded-full
-              px-3
-              py-1.5
-              text-[9px]
-              font-black
-              uppercase
-              tracking-[0.16em]
-            "
-            style={{
-              color: primary,
-              backgroundColor: `${secondary}12`,
-            }}
-          >
-            {category}
-          </span>
-
-          {formattedDate && (
-            <span className="text-xs font-bold text-slate-400">
-              {formattedDate}
-            </span>
-          )}
-
-          {contribution?.location && (
-            <span className="text-xs font-bold text-slate-400">
-              ◉ {contribution.location}
-            </span>
-          )}
-        </div>
-
-        <h3
-          className="
-            mt-3
-            text-xl
-            font-black
-            leading-tight
-            tracking-[-0.03em]
-            md:text-2xl
-          "
-          style={{
-            color: primary,
-          }}
-        >
-          {title}
-        </h3>
-
-        {description && (
-          <p
-            className="
-              mt-3
-              max-w-4xl
-              whitespace-pre-wrap
-              text-sm
-              font-medium
-              leading-7
-              text-slate-500
-            "
-          >
-            {description}
-          </p>
-        )}
-      </div>
-
-      <div
-        className="
-          relative
-          z-10
-          flex
-          items-start
-          md:justify-end
-        "
-      >
-        {link ? (
-          <motion.a
-            whileHover={{
-              x: 4,
-            }}
-            href={link}
-            target="_blank"
-            rel="noreferrer"
-            className="
-              inline-flex
-              items-center
-              gap-2
-              rounded-full
-              border
-              border-slate-200
-              bg-white
-              px-4
-              py-2.5
-              text-xs
-              font-black
-              shadow-sm
-            "
-            style={{
-              color: primary,
-            }}
-          >
-            View
-            <span
-              className="
-                flex
-                h-7
-                w-7
-                items-center
-                justify-center
-                rounded-full
-                text-white
-              "
-              style={{
-                backgroundColor: secondary,
-              }}
-            >
-              ↗
-            </span>
-          </motion.a>
-        ) : (
-          <span
-            className="
-              rounded-full
-              bg-slate-50
-              px-4
-              py-2
-              text-[9px]
-              font-black
-              uppercase
-              tracking-[0.12em]
-              text-slate-400
-            "
-          >
-            Shared via Bridge
-          </span>
-        )}
-      </div>
-    </motion.article>
-  );
-}
 
 /* =======================================================
    BRIDGE MESSAGES
@@ -1273,66 +1126,67 @@ export function BridgeMessages({
      LOAD INBOX
   ===================================================== */
 
-  useEffect(() => {
-    if (!token) {
-      return undefined;
-    }
 
-    const controller = new AbortController();
 
-    async function loadConnectionInbox() {
-      try {
-        setConnectionInboxLoading(true);
 
-        const response = await fetch(`${API_BASE}/api/profile/connect/inbox`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            memberToken: token,
-          }),
-          signal: controller.signal,
-        });
+useEffect(() => {
+  if (!token) {
+    return undefined;
+  }
 
-        const result = await response.json();
+  const controller = new AbortController();
 
-        if (!response.ok || !result?.success) {
-          throw new Error(
-            result?.error || "Could not load Bridge connections.",
-          );
-        }
+  async function loadConnectionInbox() {
+    try {
+      setConnectionInboxLoading(true);
 
-        if (controller.signal.aborted) {
-          return;
-        }
+      const response = await fetch(`${API_BASE}/api/profile/connect/inbox`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          memberToken: token,
+        }),
+        signal: controller.signal,
+      });
 
-        setConnectionInbox(
-          Array.isArray(result?.connections) ? result.connections : [],
-        );
+      const result = await response.json();
 
-        setConnectionInboxError("");
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          return;
-        }
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || "Could not load Bridge connections.");
+      }
 
-        console.error("Connection inbox error:", error);
+      if (controller.signal.aborted) {
+        return;
+      }
 
-        setConnectionInboxError(
-          error?.message || "Connections are temporarily unavailable.",
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setConnectionInboxLoading(false);
-        }
+      setConnectionInbox(
+        Array.isArray(result?.connections) ? result.connections : [],
+      );
+
+      setConnectionInboxError("");
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+
+      console.error("Connection inbox error:", error);
+
+      setConnectionInboxError(
+        error?.message || "Connections are temporarily unavailable.",
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        setConnectionInboxLoading(false);
       }
     }
+  }
 
-    loadConnectionInbox();
+  loadConnectionInbox();
 
-    return () => controller.abort();
-  }, [token]);
+  return () => controller.abort();
+}, [token]);
 
   /* =====================================================
      LOAD MESSAGES
@@ -2376,6 +2230,17 @@ return (
 
 export default function ProfileView({ data, theme, onClose, onEdit }) {
   const scrollContainerRef = useRef(null);
+  const autoProfileProcessStartedRef = useRef(false);
+
+  useEffect(() => {
+  const previousOverflow = document.body.style.overflow;
+
+  document.body.style.overflow = "hidden";
+
+  return () => {
+    document.body.style.overflow = previousOverflow;
+  };
+}, []);
 
   const { scrollYProgress } = useScroll({
     container: scrollContainerRef,
@@ -2404,6 +2269,7 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
   ===================================================== */
 
   const [liveProfileData, setLiveProfileData] = useState(null);
+  const [showInterestModal, setShowInterestModal] = useState(false);
 
   const profileData = useMemo(
     () => ({
@@ -2529,7 +2395,7 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
 
   const creatorLevel = profileData?.creatorLevel || "";
 
-  const submissionCount = Number(profileData?.submissionCount) || 0;
+
 
   const memberSince = formatMemberSince(profileData?.creationDate);
 
@@ -3042,8 +2908,50 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
 
   const [contributionReloadKey, setContributionReloadKey] = useState(0);
 
+
   useEffect(() => {
-    if (!token) {
+    if (!memberRecordId) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    async function loadLiveSubmissionCount() {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/profile-contribution-count/${encodeURIComponent(
+            memberRecordId,
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || result?.success !== true) {
+          throw new Error(result?.error || "Could not load submission count.");
+        }
+
+  
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+
+        console.error("Live submission count error:", error);
+      }
+    }
+
+    loadLiveSubmissionCount();
+
+    return () => controller.abort();
+  }, [memberRecordId]);
+
+  useEffect(() => {
+    if (!memberRecordId) {
       return undefined;
     }
 
@@ -3052,7 +2960,7 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
     async function loadContributions() {
       try {
         const response = await fetch(
-          `${API_BASE}/api/profile/${encodeURIComponent(token)}/contributions`,
+          `${API_BASE}/api/public-profile/${encodeURIComponent(memberRecordId)}`,
           {
             method: "GET",
             cache: "no-store",
@@ -3098,13 +3006,86 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
     loadContributions();
 
     return () => controller.abort();
-  }, [token, contributionReloadKey]);
+  }, [memberRecordId, contributionReloadKey]);
 
-  const sharedContributions = useMemo(() => contributions, [contributions]);
+const sharedContributions = useMemo(
+  () =>
+    contributions
+      .filter((item) =>
+        Boolean(
+          item?.title ||
+          item?.originalTitle ||
+          item?.Title ||
+          item?.["Submission Title"] ||
+          item?.bridgePublishedLink ||
+          item?.["Bridge Published Link"] ||
+          item?.publishedLink ||
+          item?.link ||
+          item?.url,
+        ),
+      )
+      .slice(0, 10),
+  [contributions],
+);
 
-  const liveSharedCount = contributionsLoading
-    ? submissionCount
-    : Math.max(submissionCount, sharedContributions.length);
+const liveSharedCount = sharedContributions.length;
+
+
+  
+  useEffect(() => {
+    if (
+      autoProfileProcessStartedRef.current ||
+      !token ||
+      contributionsLoading ||
+      profileStrength !== 0 ||
+      liveSharedCount <= 0
+    ) {
+      return;
+    }
+
+    autoProfileProcessStartedRef.current = true;
+
+    async function triggerInitialProfileAI() {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/profile/${encodeURIComponent(token)}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
+          },
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || result?.success !== true) {
+          throw new Error(
+            result?.details ||
+              result?.error ||
+              "Could not trigger Profile AI processing.",
+          );
+        }
+
+        const freshProfile = await fetchMainProfile();
+
+        if (freshProfile) {
+          setLiveProfileData(freshProfile);
+        }
+      } catch (error) {
+        console.error("Initial Profile AI trigger error:", error);
+      }
+    }
+
+    void triggerInitialProfileAI();
+  }, [
+    token,
+    contributionsLoading,
+    profileStrength,
+    liveSharedCount,
+    fetchMainProfile,
+  ]);
 
   function retryContributions() {
     setContributionsLoading(true);
@@ -3112,6 +3093,8 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
 
     setContributionReloadKey((value) => value + 1);
   }
+
+  
 
   /* =====================================================
      BRIDGE QUESTIONS
@@ -3353,41 +3336,82 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
     <div
       ref={scrollContainerRef}
       className="
-        fixed
-        inset-0
-        z-[9500]
-        overflow-y-auto
-      "
+    profile-scrollbar
+    fixed
+    inset-0
+    z-[9500]
+    overflow-y-auto
+  "
       style={{
         fontFamily: `${font}, sans-serif`,
         backgroundColor: background,
       }}
     >
+      <style>{`
+  .profile-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: ${secondary} rgba(15, 23, 42, 0.08);
+  }
+
+  .profile-scrollbar::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .profile-scrollbar::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.06);
+  }
+
+  .profile-scrollbar::-webkit-scrollbar-thumb {
+    background: ${secondary};
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .profile-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: ${primary};
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+`}</style>
       {/* PAGE PROGRESS */}
 
-      <motion.div
-        className="
-          fixed
-          left-0
-          right-0
-          top-0
-          z-[10000]
-          h-[3px]
-          origin-left
-        "
-        style={{
-          scaleX: smoothProgress,
+      {/* PAGE SCROLL PROGRESS */}
 
-          background: `linear-gradient(
-            90deg,
-            ${secondary},
-            ${primary},
-            ${secondary}
-          )`,
-        }}
-      />
+      <div
+        className="
+    fixed
+    right-[5px]
+    top-[90px]
+    bottom-[20px]
+    z-[12000]
+    w-[7px]
+    overflow-hidden
+    rounded-full
+    bg-slate-300/60
+    shadow-inner
+  "
+      >
+        <motion.div
+          className="
+      h-full
+      w-full
+      origin-top
+      rounded-full
+    "
+          style={{
+            scaleY: smoothProgress,
+            background: `linear-gradient(
+        180deg,
+        ${secondary},
+        ${primary}
+      )`,
+          }}
+        />
+      </div>
 
       <FloatingScene theme={theme} />
+
       {/* =====================================================
     FLOATING MESSAGES BUTTON
 ===================================================== */}
@@ -4903,64 +4927,370 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
           </div>
         </div>
       </motion.section>
-
       {/* =====================================================
-          WEATHER
-      ===================================================== */}
+    EXPERTISE
+===================================================== */}
 
       <section
         className="
-          relative
-          z-10
-          px-4
-          py-5
-          md:px-6
-        "
+    relative
+    z-10
+    px-4
+    py-5
+    md:px-6
+  "
       >
         <Reveal>
           <div
             className="
-              relative
-              mx-auto
-              max-w-[1400px]
-              overflow-hidden
-              rounded-[38px]
-              border
-              border-white/20
-              shadow-[0_32px_110px_rgba(15,23,42,.18)]
-            "
-            style={{
-              background: `linear-gradient(
-                135deg,
-                ${primary},
-                ${secondary}
-              )`,
-            }}
+        relative
+        mx-auto
+        max-w-[1400px]
+        overflow-visible
+        rounded-[30px]
+        border
+        border-slate-200/80
+        bg-white
+        px-6
+        py-6
+        shadow-[0_22px_70px_rgba(15,23,42,.08)]
+        md:px-8
+        md:py-7
+      "
           >
-            <motion.div
-              animate={{
-                x: ["-100%", "160%"],
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: 10,
-                ease: "linear",
-              }}
+            {/* TOP ACCENT */}
+
+            <div
               className="
-                pointer-events-none
-                absolute
-                inset-y-0
-                w-48
-                rotate-12
-                bg-white/10
-                blur-3xl
-              "
+          absolute
+          left-8
+          right-8
+          top-0
+          h-[3px]
+          rounded-full
+        "
+              style={{
+                background: `linear-gradient(
+            90deg,
+            ${secondary},
+            ${primary},
+            ${secondary}
+          )`,
+              }}
             />
 
-            <ProfileWeather primary={primary} secondary={secondary} />
+            {/* HEADER */}
+
+            <div
+              className="
+          flex
+          flex-col
+          gap-4
+          md:flex-row
+          md:items-end
+          md:justify-between
+        "
+            >
+              <div>
+                <Eyebrow secondary={secondary}>
+                  <LimitedHoverHelp
+                    storageKey="expertise"
+                    helpText="Expertise highlights the key topics, knowledge, and experience that help others quickly understand what this person knows and what they can be asked about."
+                    secondary={secondary}
+                  >
+                    Expertise
+                  </LimitedHoverHelp>
+                </Eyebrow>
+
+                <h2
+                  className="
+              mt-3
+              text-[28px]
+              font-black
+              leading-tight
+              tracking-[-0.045em]
+              md:text-[34px]
+            "
+                  style={{
+                    color: primary,
+                  }}
+                >
+                  Ask {firstName} about
+                </h2>
+
+                <p
+                  className="
+              mt-2
+              max-w-2xl
+              text-sm
+              font-medium
+              leading-6
+              text-slate-500
+            "
+                >
+                  Quick topics that help people understand this person’s
+                  knowledge, experience and strengths.
+                </p>
+              </div>
+
+              {expertiseItems.length > 0 && (
+                <div
+                  className="
+              shrink-0
+              rounded-full
+              border
+              border-slate-200
+              bg-slate-50
+              px-4
+              py-2
+              text-[11px]
+              font-black
+              uppercase
+              tracking-[0.12em]
+              text-slate-400
+            "
+                >
+                  {expertiseItems.length} topics
+                </div>
+              )}
+            </div>
+
+            {/* DIVIDER */}
+
+            <div className="my-5 h-px bg-slate-100" />
+
+            {/* EXPERTISE TAGS */}
+
+            {expertiseItems.length > 0 ? (
+              <div
+                className="
+            flex
+            flex-wrap
+            items-center
+            gap-2.5
+          "
+              >
+                {expertiseItems.map((item, index) => (
+                  <motion.span
+                    key={`${item}-${index}`}
+                    initial={{
+                      opacity: 0,
+                      y: 8,
+                    }}
+                    whileInView={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    viewport={{
+                      once: true,
+                    }}
+                    transition={{
+                      delay: Math.min(index * 0.025, 0.25),
+                    }}
+                    whileHover={{
+                      y: -2,
+                      scale: 1.02,
+                    }}
+                    className="
+                inline-flex
+                items-center
+                rounded-full
+                border
+                border-slate-200
+                bg-slate-50/80
+                px-4
+                py-2.5
+                text-[13px]
+                font-bold
+                leading-none
+                shadow-[0_4px_12px_rgba(15,23,42,.04)]
+                transition
+              "
+                    style={{
+                      color: primary,
+                    }}
+                  >
+                    <span
+                      className="
+                  mr-2
+                  h-2
+                  w-2
+                  shrink-0
+                  rounded-full
+                "
+                      style={{
+                        backgroundColor: secondary,
+                        boxShadow: `0 0 8px ${secondary}55`,
+                      }}
+                    />
+
+                    {item}
+                  </motion.span>
+                ))}
+              </div>
+            ) : (
+              <div
+                className="
+            rounded-2xl
+            border
+            border-dashed
+            border-slate-200
+            bg-slate-50/70
+            px-5
+            py-4
+          "
+              >
+                <p className="text-sm font-semibold text-slate-400">
+                  Expertise hasn’t been added yet.
+                </p>
+              </div>
+            )}
           </div>
         </Reveal>
       </section>
+
+      {/* =====================================================
+    OPPORTUNITIES
+===================================================== */}
+
+      {openToOpportunities && opportunityTypes.length > 0 && (
+        <section
+          className="
+      relative
+      z-10
+      px-4
+      pb-5
+      md:px-6
+    "
+        >
+          <Reveal>
+            <div
+              className="
+          relative
+          mx-auto
+          max-w-[1400px]
+          overflow-visible
+          rounded-[28px]
+          border
+          border-slate-200/80
+          bg-white
+          px-6
+          py-5
+          shadow-[0_18px_55px_rgba(15,23,42,.06)]
+          md:px-8
+        "
+            >
+              <div
+                className="
+            flex
+            flex-col
+            gap-4
+            lg:flex-row
+            lg:items-center
+            lg:justify-between
+          "
+              >
+                {/* LEFT */}
+
+                <div className="shrink-0">
+                  <Eyebrow secondary={secondary}>
+                    <LimitedHoverHelp
+                      storageKey="opportunities"
+                      helpText="Opportunities shows the types of introductions, collaborations, or connections this member is currently open to through Bridge."
+                      secondary={secondary}
+                    >
+                      Opportunities
+                    </LimitedHoverHelp>
+                  </Eyebrow>
+
+                  <h3
+                    className="
+                mt-2
+                text-2xl
+                font-black
+                tracking-[-0.04em]
+                md:text-[28px]
+              "
+                    style={{
+                      color: primary,
+                    }}
+                  >
+                    Open to meaningful connections
+                  </h3>
+                </div>
+
+                {/* RIGHT */}
+
+                <div
+                  className="
+              flex
+              flex-1
+              flex-wrap
+              gap-2.5
+              lg:justify-end
+            "
+                >
+                  {opportunityTypes.map((item, index) => (
+                    <motion.span
+                      key={`${item}-${index}`}
+                      initial={{
+                        opacity: 0,
+                        y: 8,
+                      }}
+                      whileInView={{
+                        opacity: 1,
+                        y: 0,
+                      }}
+                      viewport={{
+                        once: true,
+                      }}
+                      transition={{
+                        delay: Math.min(index * 0.03, 0.2),
+                      }}
+                      whileHover={{
+                        y: -2,
+                        scale: 1.02,
+                      }}
+                      className="
+                  inline-flex
+                  items-center
+                  rounded-full
+                  border
+                  border-slate-200
+                  bg-slate-50
+                  px-4
+                  py-2.5
+                  text-[13px]
+                  font-bold
+                  leading-none
+                  shadow-sm
+                "
+                      style={{
+                        color: primary,
+                      }}
+                    >
+                      <span
+                        className="
+                    mr-2
+                    h-2
+                    w-2
+                    shrink-0
+                    rounded-full
+                  "
+                        style={{
+                          backgroundColor: secondary,
+                        }}
+                      />
+
+                      {item}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+      )}
 
       {/* =====================================================
           ABOUT / BRIDGE SUMMARY
@@ -4986,7 +5316,15 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
         >
           <Reveal className="lg:col-span-7">
             <GlassCard className="h-full p-7 md:p-9">
-              <Eyebrow secondary={secondary}>About {firstName}</Eyebrow>
+              <Eyebrow secondary={secondary}>
+                <LimitedHoverHelp
+                  storageKey="about"
+                  helpText="About gives a quick introduction to who this member is, what they do, and the perspective or experience they bring to the Bridge community."
+                  secondary={secondary}
+                >
+                  About {firstName}
+                </LimitedHoverHelp>
+              </Eyebrow>
 
               <h2
                 className="
@@ -5085,7 +5423,13 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
 
               <div className="relative z-10">
                 <Eyebrow secondary={secondary} light>
-                  Bridge Summary
+                  <LimitedHoverHelp
+                    storageKey="bridge-summary"
+                    helpText="Bridge Summary is a living overview built from this member's profile and participation. It can become more useful as the member continues contributing through Bridge."
+                    secondary={secondary}
+                  >
+                    Bridge Summary
+                  </LimitedHoverHelp>
                 </Eyebrow>
 
                 <h2
@@ -5097,7 +5441,7 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
                     md:text-4xl
                   "
                 >
-                  Bridge knows more as you participate.
+                  Get to know the person behind the profile.
                 </h2>
 
                 {aiProfileSummary ? (
@@ -5179,184 +5523,72 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
           EXPERTISE / INTERESTS
       ===================================================== */}
 
+      {/* =====================================================
+    INTERESTS
+===================================================== */}
+
       <section
         className="
-          relative
-          z-10
-          px-4
-          py-5
-          md:px-6
-        "
+    relative
+    z-10
+    px-4
+    py-5
+    md:px-6
+  "
       >
-        <div
-          className="
-            mx-auto
-            grid
-            max-w-[1400px]
-            gap-6
-            lg:grid-cols-12
-          "
-        >
-          <Reveal className="lg:col-span-8">
-            <GlassCard className="h-full p-7 md:p-9">
-              <Eyebrow secondary={secondary}>Expertise</Eyebrow>
-
-              <div
-                className="
-                  mt-4
-                  flex
-                  flex-col
-                  gap-3
-                  md:flex-row
-                  md:items-end
-                  md:justify-between
-                "
-              >
-                <div>
-                  <h2
-                    className="
-                      text-3xl
-                      font-black
-                      tracking-[-0.045em]
-                      md:text-4xl
-                    "
-                    style={{
-                      color: primary,
-                    }}
+        <div className="mx-auto max-w-[1400px]">
+          <Reveal>
+            <GlassCard className="p-7 md:p-9">
+              <div className="flex items-center justify-between gap-4">
+                <Eyebrow secondary={secondary}>
+                  <LimitedHoverHelp
+                    storageKey="interests"
+                    helpText="Interests help Bridge understand the topics this member cares about and can be used to make their experience, recommendations, and connections more relevant."
+                    secondary={secondary}
                   >
-                    Ask {firstName} about
-                  </h2>
+                    Interests
+                  </LimitedHoverHelp>
+                </Eyebrow>
 
-                  <p
-                    className="
-                      mt-2
-                      max-w-2xl
-                      text-sm
-                      font-medium
-                      leading-6
-                      text-slate-500
-                    "
-                  >
-                    Knowledge, experience and topics connected to this Profile.
-                  </p>
-                </div>
-
-                <span
+                <motion.button
+                  type="button"
+                  onClick={() => setShowInterestModal(true)}
+                  whileHover={{
+                    y: -2,
+                    scale: 1.02,
+                  }}
+                  whileTap={{
+                    scale: 0.97,
+                  }}
                   className="
-                    w-fit
-                    rounded-full
-                    bg-slate-50
-                    px-4
-                    py-2
-                    text-[9px]
-                    font-black
-                    uppercase
-                    tracking-[0.16em]
-                    text-slate-400
-                  "
+              rounded-full
+              border
+              border-blue-100
+              bg-blue-50
+              px-4
+              py-2
+              text-xs
+              font-black
+              shadow-sm
+              transition
+              hover:border-blue-200
+              hover:bg-blue-100
+            "
+                  style={{
+                    color: secondary,
+                  }}
                 >
-                  {expertiseItems.length} topics
-                </span>
+                  Update Interests
+                </motion.button>
               </div>
-
-              {expertiseItems.length > 0 ? (
-                <div
-                  className="
-                    mt-8
-                    flex
-                    flex-wrap
-                    gap-3
-                  "
-                >
-                  {expertiseItems.map((item, index) => (
-                    <motion.span
-                      key={`${item}-${index}`}
-                      initial={{
-                        opacity: 0,
-                        scale: 0.8,
-                        y: 15,
-                      }}
-                      whileInView={{
-                        opacity: 1,
-                        scale: 1,
-                        y: 0,
-                      }}
-                      viewport={{
-                        once: true,
-                      }}
-                      transition={{
-                        delay: Math.min(index * 0.035, 0.4),
-                      }}
-                      whileHover={{
-                        y: -5,
-                        scale: 1.035,
-                      }}
-                      className="
-                          rounded-full
-                          border
-                          border-slate-200
-                          bg-white
-                          px-4
-                          py-2.5
-                          text-sm
-                          font-black
-                          shadow-sm
-                        "
-                      style={{
-                        color: primary,
-                      }}
-                    >
-                      <span
-                        className="
-                            mr-2
-                            inline-block
-                            h-2
-                            w-2
-                            rounded-full
-                          "
-                        style={{
-                          backgroundColor: secondary,
-
-                          boxShadow: `0 0 10px ${secondary}`,
-                        }}
-                      />
-
-                      {item}
-                    </motion.span>
-                  ))}
-                </div>
-              ) : (
-                <div
-                  className="
-                    mt-7
-                    rounded-[26px]
-                    border
-                    border-dashed
-                    border-slate-200
-                    bg-slate-50/70
-                    p-6
-                    text-sm
-                    font-semibold
-                    text-slate-400
-                  "
-                >
-                  Expertise hasn’t been added yet.
-                </div>
-              )}
-            </GlassCard>
-          </Reveal>
-
-          <Reveal delay={0.08} className="lg:col-span-4">
-            <GlassCard className="h-full p-7 md:p-9">
-              <Eyebrow secondary={secondary}>Interests</Eyebrow>
 
               <h2
                 className="
-                  mt-4
-                  text-3xl
-                  font-black
-                  tracking-[-0.045em]
-                "
+            mt-4
+            text-3xl
+            font-black
+            tracking-[-0.045em]
+          "
                 style={{
                   color: primary,
                 }}
@@ -5366,12 +5598,12 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
 
               <p
                 className="
-                  mt-3
-                  text-sm
-                  font-medium
-                  leading-6
-                  text-slate-500
-                "
+            mt-3
+            text-sm
+            font-medium
+            leading-6
+            text-slate-500
+          "
               >
                 Interests connected to {firstName}'s activity and Profile.
               </p>
@@ -5379,34 +5611,33 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
               {interests.length > 0 ? (
                 <div
                   className="
-                    mt-6
-                    flex
-                    flex-wrap
-                    gap-2
-                  "
+              mt-6
+              flex
+              flex-wrap
+              gap-2
+            "
                 >
                   {interests.map((interest, index) => (
                     <motion.span
                       key={`${interest}-${index}`}
-                      animate={{
-                        y: [0, index % 2 === 0 ? -3 : 3, 0],
+                      whileHover={{
+                        y: -2,
+                        scale: 1.02,
                       }}
                       transition={{
-                        repeat: Infinity,
-                        duration: 4 + (index % 4),
-                        ease: "easeInOut",
+                        duration: 0.2,
                       }}
                       className="
-                          rounded-full
-                          border
-                          border-slate-200
-                          bg-white
-                          px-3
-                          py-2
-                          text-xs
-                          font-black
-                          shadow-sm
-                        "
+                  rounded-full
+                  border
+                  border-slate-200
+                  bg-white
+                  px-3
+                  py-2
+                  text-xs
+                  font-black
+                  shadow-sm
+                "
                       style={{
                         color: primary,
                       }}
@@ -5418,14 +5649,14 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
               ) : (
                 <p
                   className="
-                    mt-6
-                    rounded-[22px]
-                    bg-slate-50
-                    p-5
-                    text-sm
-                    font-semibold
-                    text-slate-400
-                  "
+              mt-6
+              rounded-[22px]
+              bg-slate-50
+              p-5
+              text-sm
+              font-semibold
+              text-slate-400
+            "
                 >
                   No connected interests yet.
                 </p>
@@ -5504,7 +5735,13 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
 
               <div className="relative z-10">
                 <Eyebrow secondary={secondary} light>
-                  Bridge Questions
+                  <LimitedHoverHelp
+                    storageKey="bridge-questions"
+                    helpText="Bridge Questions help your profile learn from your experience, interests, and perspective so Bridge can build a richer and more useful living profile over time."
+                    secondary={secondary}
+                  >
+                    Bridge Questions
+                  </LimitedHoverHelp>
                 </Eyebrow>
 
                 <h2
@@ -5946,6 +6183,14 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
         </Reveal>
       </section>
 
+      <ProfileRecommendations
+        rawData={profileData}
+        profile={{
+          theme,
+        }}
+        token={token}
+      />
+
       {/* =====================================================
           CONTRIBUTIONS
       ===================================================== */}
@@ -6221,19 +6466,116 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
                       gap-4
                     "
                   >
-                    {sharedContributions.map((contribution, index) => (
-                      <ContributionCard
-                        key={`${
-                          contribution?.link ||
-                          contribution?.title ||
-                          "contribution"
-                        }-${index}`}
-                        contribution={contribution}
-                        primary={primary}
-                        secondary={secondary}
-                        index={index}
-                      />
-                    ))}
+                    {sharedContributions.map((contribution, index) => {
+                      const title =
+                        contribution?.title ||
+                        contribution?.originalTitle ||
+                        "Bridge Contribution";
+
+const link = cleanExternalUrl(
+  contribution?.bridgePublishedLink ||
+    contribution?.["Bridge Published Link"] ||
+    contribution?.publishedLink ||
+    contribution?.link ||
+    contribution?.url ||
+    "",
+);
+
+                      const submittedDate = formatContributionDate(
+                        contribution?.submittedDate,
+                      );
+
+                      return (
+                        <motion.div
+                          key={`${title}-${index}`}
+                          initial={{
+                            opacity: 0,
+                            y: 10,
+                          }}
+                          whileInView={{
+                            opacity: 1,
+                            y: 0,
+                          }}
+                          viewport={{
+                            once: true,
+                          }}
+                          transition={{
+                            delay: Math.min(index * 0.03, 0.25),
+                          }}
+                          className="
+        flex
+        flex-col
+        gap-3
+        rounded-[20px]
+        border
+        border-slate-200
+        bg-white
+        px-5
+        py-4
+        shadow-sm
+        sm:flex-row
+        sm:items-center
+        sm:justify-between
+      "
+                        >
+                          <div className="min-w-0">
+                            <p
+                              className="
+            text-[15px]
+            font-black
+            leading-6
+          "
+                              style={{
+                                color: primary,
+                              }}
+                            >
+                              {title}
+                            </p>
+
+                            {submittedDate && (
+                              <p className="mt-1 text-xs font-semibold text-slate-400">
+                                {submittedDate}
+                              </p>
+                            )}
+                          </div>
+
+                          {link ? (
+                            <a
+                              href={link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="
+            inline-flex
+            shrink-0
+            items-center
+            gap-2
+            text-sm
+            font-black
+            transition
+            hover:opacity-70
+          "
+                              style={{
+                                color: secondary,
+                              }}
+                            >
+                              View article
+                              <span>↗</span>
+                            </a>
+                          ) : (
+                            <span
+                              className="
+            shrink-0
+            text-xs
+            font-bold
+            text-slate-400
+          "
+                            >
+                              Published link coming soon
+                            </span>
+                          )}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
             </div>
@@ -6654,7 +6996,7 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
             grid
             max-w-[1400px]
             gap-6
-            lg:grid-cols-3
+            lg:grid-cols-2
           "
         >
           {/* MEMBER DETAILS */}
@@ -6971,199 +7313,6 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
           </Reveal>
 
           {/* OPPORTUNITIES */}
-
-          <Reveal delay={0.12}>
-            <motion.div
-              whileHover={{
-                y: -4,
-              }}
-              className="
-                relative
-                h-full
-                overflow-hidden
-                rounded-[34px]
-                p-7
-                text-white
-                shadow-[0_30px_100px_rgba(7,26,74,.22)]
-              "
-              style={{
-                background: openToOpportunities
-                  ? `linear-gradient(
-                        145deg,
-                        ${primary},
-                        ${secondary}
-                      )`
-                  : `linear-gradient(
-                        145deg,
-                        ${primary},
-                        #334155
-                      )`,
-              }}
-            >
-              <motion.div
-                animate={{
-                  x: ["-170%", "220%"],
-                }}
-                transition={{
-                  repeat: Infinity,
-                  duration: 7,
-                  ease: "linear",
-                }}
-                className="
-                  pointer-events-none
-                  absolute
-                  inset-y-0
-                  w-28
-                  rotate-12
-                  bg-white/10
-                  blur-2xl
-                "
-              />
-
-              <div className="relative z-10">
-                <Eyebrow secondary={secondary} light>
-                  Opportunities
-                </Eyebrow>
-
-                <h3
-                  className="
-                    mt-4
-                    text-3xl
-                    font-black
-                    leading-tight
-                    tracking-[-0.04em]
-                  "
-                >
-                  {openToOpportunities
-                    ? "Open to meaningful connections."
-                    : "Growing through Bridge."}
-                </h3>
-
-                <p
-                  className="
-                    mt-4
-                    text-sm
-                    font-medium
-                    leading-7
-                    text-white/75
-                  "
-                >
-                  {openToOpportunities
-                    ? `${firstName} is open to relevant introductions and opportunities through Bridge.`
-                    : `${firstName}'s Profile can continue to grow through participation and contributions.`}
-                </p>
-
-                {openToOpportunities && opportunityTypes.length > 0 && (
-                  <div
-                    className="
-                        mt-6
-                        flex
-                        flex-wrap
-                        gap-2
-                      "
-                  >
-                    {opportunityTypes.map((item, index) => (
-                      <motion.span
-                        whileHover={{
-                          y: -3,
-                        }}
-                        key={`${item}-${index}`}
-                        className="
-                              rounded-full
-                              border
-                              border-white/15
-                              bg-white/10
-                              px-3
-                              py-2
-                              text-xs
-                              font-black
-                              text-white/90
-                              backdrop-blur-xl
-                            "
-                      >
-                        {item}
-                      </motion.span>
-                    ))}
-                  </div>
-                )}
-
-                <div
-                  className="
-                    mt-7
-                    grid
-                    grid-cols-2
-                    gap-3
-                  "
-                >
-                  <div
-                    className="
-                      rounded-[22px]
-                      border
-                      border-white/10
-                      bg-white/10
-                      p-4
-                      backdrop-blur-xl
-                    "
-                  >
-                    <p
-                      className="
-                        text-[9px]
-                        font-black
-                        uppercase
-                        tracking-[0.16em]
-                        text-white/50
-                      "
-                    >
-                      Shared
-                    </p>
-
-                    <p
-                      className="
-                        mt-2
-                        text-3xl
-                        font-black
-                      "
-                    >
-                      {liveSharedCount}
-                    </p>
-                  </div>
-
-                  <div
-                    className="
-                      rounded-[22px]
-                      border
-                      border-white/10
-                      bg-white/10
-                      p-4
-                      backdrop-blur-xl
-                    "
-                  >
-                    <p
-                      className="
-                        text-[9px]
-                        font-black
-                        uppercase
-                        tracking-[0.16em]
-                        text-white/50
-                      "
-                    >
-                      Strength
-                    </p>
-
-                    <p
-                      className="
-                        mt-2
-                        text-3xl
-                        font-black
-                      "
-                    >
-                      {profileStrength}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </Reveal>
         </div>
       </section>
 
@@ -7283,8 +7432,54 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
           >
             Back to My Page
           </motion.button>
+          {showInterestModal && (
+            <div className="fixed inset-0 z-9999 flex items-center justify-center bg-[#071A4A]/70 px-4 backdrop-blur-sm">
+              <div className="relative max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-4xl bg-white shadow-[0_30px_100px_rgba(0,0,0,0.35)]">
+                <button
+                  type="button"
+                  onClick={() => setShowInterestModal(false)}
+                  className="
+          absolute
+          right-5
+          top-3
+          z-20
+          flex
+          h-10
+          w-10
+          items-center
+          justify-center
+          rounded-full
+          bg-slate-100
+          text-xl
+          font-black
+          text-[#071A4A]
+          transition
+          hover:bg-slate-200
+        "
+                >
+                  ×
+                </button>
+
+                <div className="pt-12">
+                  <InterestManager
+                    rawData={{
+                      ...profileData,
+                      interestTags: Array.isArray(interests)
+                        ? interests.join(", ")
+                        : profileData?.interestTags ||
+                          profileData?.["Interest Tags"] ||
+                          "",
+                    }}
+                    profile={{
+                      theme,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </footer>
     </div>
   );
-}
+}   

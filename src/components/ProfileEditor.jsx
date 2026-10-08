@@ -345,6 +345,11 @@ function ProfilePhoto({
   );
 }
 
+
+
+
+
+
 /* -------------------------------------------------------
    SECTION CARD
 ------------------------------------------------------- */
@@ -364,7 +369,13 @@ function SectionCard({
       initial="hidden"
       animate="visible"
       whileHover={{
-        y: -3,
+        y: -6,
+        scale: 1.002,
+      }}
+      transition={{
+        type: "spring",
+        stiffness: 260,
+        damping: 22,
       }}
       className="
         group
@@ -373,56 +384,125 @@ function SectionCard({
         rounded-[28px]
         border
         border-white/80
-        bg-white/75
+        bg-white/80
         p-5
         shadow-[0_20px_60px_rgba(15,23,42,0.065)]
         backdrop-blur-2xl
-        transition-all
+        transition-[border-color,box-shadow]
         duration-300
-        hover:border-blue-100
-        hover:shadow-[0_28px_80px_rgba(15,23,42,0.10)]
+        hover:border-blue-200/80
+        hover:shadow-[0_30px_90px_rgba(37,99,235,0.13)]
         md:p-6
       "
     >
+      {/* animated top highlight */}
+      <motion.div
+        className="
+          pointer-events-none
+          absolute
+          left-0
+          top-0
+          h-0.75
+          w-full
+          origin-left
+          bg-linear-to-r
+          from-blue-500
+          via-cyan-400
+          to-violet-500
+          opacity-0
+          group-hover:opacity-100
+        "
+        initial={{
+          scaleX: 0,
+        }}
+        whileInView={{
+          scaleX: 1,
+        }}
+        transition={{
+          duration: 0.7,
+          ease: "easeOut",
+        }}
+      />
+
+      {/* soft moving glow */}
+      <motion.div
+        className="
+          pointer-events-none
+          absolute
+          -right-24
+          -top-24
+          h-56
+          w-56
+          rounded-full
+          bg-blue-400/5
+          blur-3xl
+        "
+        animate={{
+          x: [0, -10, 0],
+          y: [0, 10, 0],
+          scale: [1, 1.08, 1],
+        }}
+        transition={{
+          duration: 7,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* hover glow */}
       <div
         className="
           pointer-events-none
           absolute
-          -right-20
-          -top-20
-          h-48
-          w-48
-          rounded-full
-          bg-blue-400/5
-          blur-3xl
-          transition
-          duration-700
-          group-hover:bg-blue-400/10
+          inset-0
+          rounded-[28px]
+          bg-linear-to-br
+          from-blue-500/[0.00]
+          via-transparent
+          to-violet-500/[0.00]
+          opacity-0
+          transition-opacity
+          duration-500
+          group-hover:from-blue-500/[0.035]
+          group-hover:to-violet-500/[0.035]
+          group-hover:opacity-100
         "
       />
 
       <div className="relative z-10">
         <div className="flex items-start gap-4">
           <motion.div
+            animate={{
+              y: [0, -2, 0],
+            }}
+            transition={{
+              duration: 3.5,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
             whileHover={{
-              rotate: 6,
-              scale: 1.06,
+              rotate: 7,
+              scale: 1.09,
             }}
             className="
               flex
-              h-11
-              w-11
+              h-12
+              w-12
               shrink-0
               items-center
               justify-center
               rounded-2xl
               border
               border-blue-100
-              bg-gradient-to-br
+              bg-linear-to-br
               from-blue-50
-              to-white
+              via-white
+              to-violet-50
               text-blue-600
-              shadow-sm
+              shadow-[0_8px_24px_rgba(37,99,235,0.10)]
+              transition-shadow
+              duration-300
+              group-hover:shadow-[0_12px_30px_rgba(37,99,235,0.18)]
             "
           >
             {icon}
@@ -430,26 +510,30 @@ function SectionCard({
 
           <div className="min-w-0">
             {eyebrow && (
-              <p
+              <h2
                 className="
-                  text-[10px]
+                  text-[24px]
                   font-black
                   uppercase
-                  tracking-[0.22em]
-                  text-blue-500
+                  leading-tight
+                  tracking-[-0.03em]
+                  text-[#071A4A]
+                  md:text-[28px]
                 "
               >
                 {eyebrow}
-              </p>
+              </h2>
             )}
 
             <h3
               className="
-                mt-1
+                mt-1.5
                 text-[18px]
                 font-black
-                tracking-[-0.025em]
-                text-[#071A4A]
+                leading-tight
+                tracking-[-0.02em]
+                text-blue-600
+                md:text-[20px]
               "
             >
               {title}
@@ -458,12 +542,13 @@ function SectionCard({
             {description && (
               <p
                 className="
-                  mt-1
+                  mt-2
                   max-w-3xl
-                  text-xs
+                  text-[14px]
                   font-medium
-                  leading-5
-                  text-slate-400
+                  leading-6
+                  text-slate-500
+                  md:text-[15px]
                 "
               >
                 {description}
@@ -695,7 +780,7 @@ function OptionGrid({ options, selected, onToggle, disabled = false }) {
 
               ${
                 checked
-                  ? "border-blue-200 bg-gradient-to-br from-blue-50 to-white text-blue-700 shadow-[0_10px_28px_rgba(59,130,246,0.08)]"
+                  ? "border-blue-200 bg-linear-to-br from-blue-50 to-white text-blue-700 shadow-[0_10px_28px_rgba(59,130,246,0.08)]"
                   : "border-slate-100 bg-white/75 text-slate-600 shadow-sm hover:border-blue-100 hover:bg-white"
               }
             `}
@@ -1547,8 +1632,8 @@ export default function ProfileEditor({
     duration-300
     hover:bg-white/95
     hover:shadow-[0_28px_80px_rgba(7,26,74,0.24)]
-    md:h-[60px]
-    md:w-[60px]
+    md:h-15
+    md:w-15
   "
         >
           <svg
@@ -1696,7 +1781,7 @@ export default function ProfileEditor({
           >
             <p
               className="
-                max-w-[155px]
+                max-w-38.75
                 truncate
                 text-[13px]
                 font-black
@@ -2870,12 +2955,14 @@ export default function ProfileEditor({
 
                         {/* PROFESSIONAL */}
 
+                        {/* PROFESSIONAL */}
+
                         <SectionCard
                           index={2}
                           icon={<GlobeIcon />}
                           eyebrow="Professional"
-                          title="Your expertise & presence"
-                          description="Show what you know and where people can learn more about you."
+                          title="Your expertise"
+                          description="Share your website, expertise, and affiliations so people can understand your work and experience."
                         >
                           <label className="block">
                             <FieldLabel>Website</FieldLabel>
@@ -2888,24 +2975,24 @@ export default function ProfileEditor({
                               }
                               placeholder="https://example.com"
                               className="
-                                mt-2
-                                w-full
-                                rounded-2xl
-                                border
-                                border-slate-200
-                                bg-white
-                                px-4
-                                py-3.5
-                                text-sm
-                                font-medium
-                                text-[#071A4A]
-                                shadow-sm
-                                outline-none
-                                placeholder:text-slate-400
-                                focus:border-blue-300
-                                focus:ring-4
-                                focus:ring-blue-100/70
-                              "
+        mt-2
+        w-full
+        rounded-2xl
+        border
+        border-slate-200
+        bg-white
+        px-4
+        py-3.5
+        text-sm
+        font-medium
+        text-[#071A4A]
+        shadow-sm
+        outline-none
+        placeholder:text-slate-400
+        focus:border-blue-300
+        focus:ring-4
+        focus:ring-blue-100/70
+      "
                             />
                           </label>
 
@@ -2920,107 +3007,114 @@ export default function ProfileEditor({
                               placeholder="Examples: automation, marketing, construction, leadership, local events..."
                               rows={4}
                               className="
-                                mt-2
-                                w-full
-                                resize-none
-                                rounded-2xl
-                                border
-                                border-slate-200
-                                bg-white
-                                px-4
-                                py-3.5
-                                text-sm
-                                font-medium
-                                leading-6
-                                text-[#071A4A]
-                                shadow-sm
-                                outline-none
-                                placeholder:text-slate-400
-                                focus:border-blue-300
-                                focus:ring-4
-                                focus:ring-blue-100/70
-                              "
+        mt-2
+        w-full
+        resize-none
+        rounded-2xl
+        border
+        border-slate-200
+        bg-white
+        px-4
+        py-3.5
+        text-sm
+        font-medium
+        leading-6
+        text-[#071A4A]
+        shadow-sm
+        outline-none
+        placeholder:text-slate-400
+        focus:border-blue-300
+        focus:ring-4
+        focus:ring-blue-100/70
+      "
                             />
                           </label>
 
-                          <div
-                            className="
-                              mt-5
-                              grid
-                              gap-4
-                              md:grid-cols-2
-                            "
-                          >
-                            <label className="block">
-                              <FieldLabel>Social Links</FieldLabel>
+                          <label className="mt-5 block">
+                            <FieldLabel>Additional Affiliations</FieldLabel>
 
-                              <textarea
-                                value={socialLinks}
-                                onChange={(event) =>
-                                  setSocialLinks(event.target.value)
-                                }
-                                placeholder={
-                                  "LinkedIn: https://...\nFacebook: https://...\nInstagram: https://..."
-                                }
-                                rows={5}
-                                className="
-                                  mt-2
-                                  w-full
-                                  resize-none
-                                  rounded-2xl
-                                  border
-                                  border-slate-200
-                                  bg-white
-                                  px-4
-                                  py-3.5
-                                  text-sm
-                                  font-medium
-                                  leading-6
-                                  text-[#071A4A]
-                                  shadow-sm
-                                  outline-none
-                                  placeholder:text-slate-400
-                                  focus:border-blue-300
-                                  focus:ring-4
-                                  focus:ring-blue-100/70
-                                "
-                              />
-                            </label>
+                            <textarea
+                              value={additionalAffiliations}
+                              onChange={(event) =>
+                                setAdditionalAffiliations(event.target.value)
+                              }
+                              placeholder="Organizations, boards, associations or community groups..."
+                              rows={4}
+                              className="
+        mt-2
+        w-full
+        resize-none
+        rounded-2xl
+        border
+        border-slate-200
+        bg-white
+        px-4
+        py-3.5
+        text-sm
+        font-medium
+        leading-6
+        text-[#071A4A]
+        shadow-sm
+        outline-none
+        placeholder:text-slate-400
+        focus:border-blue-300
+        focus:ring-4
+        focus:ring-blue-100/70
+      "
+                            />
+                          </label>
+                        </SectionCard>
 
-                            <label className="block">
-                              <FieldLabel>Additional Affiliations</FieldLabel>
+                        {/* SOCIAL LINKS */}
 
-                              <textarea
-                                value={additionalAffiliations}
-                                onChange={(event) =>
-                                  setAdditionalAffiliations(event.target.value)
-                                }
-                                placeholder="Organizations, boards, associations or community groups..."
-                                rows={5}
-                                className="
-                                  mt-2
-                                  w-full
-                                  resize-none
-                                  rounded-2xl
-                                  border
-                                  border-slate-200
-                                  bg-white
-                                  px-4
-                                  py-3.5
-                                  text-sm
-                                  font-medium
-                                  leading-6
-                                  text-[#071A4A]
-                                  shadow-sm
-                                  outline-none
-                                  placeholder:text-slate-400
-                                  focus:border-blue-300
-                                  focus:ring-4
-                                  focus:ring-blue-100/70
-                                "
-                              />
-                            </label>
-                          </div>
+                        <SectionCard
+                          index={3}
+                          icon={<span className="text-lg font-black">◎</span>}
+                          eyebrow="Social Links"
+                          title="Where people can find you"
+                          description="Add the public social profiles you want people to use to learn more about you and your work."
+                        >
+                          <label className="block">
+                            <FieldLabel>Public Social Profiles</FieldLabel>
+
+                            <textarea
+                              value={socialLinks}
+                              onChange={(event) =>
+                                setSocialLinks(event.target.value)
+                              }
+                              placeholder={
+                                "LinkedIn: https://...\nFacebook: https://...\nInstagram: https://...\nYouTube: https://..."
+                              }
+                              rows={6}
+                              className="
+        mt-2
+        w-full
+        resize-none
+        rounded-2xl
+        border
+        border-slate-200
+        bg-white
+        px-4
+        py-3.5
+        text-sm
+        font-medium
+        leading-6
+        text-[#071A4A]
+        shadow-sm
+        outline-none
+        placeholder:text-slate-400
+        focus:border-blue-300
+        focus:ring-4
+        focus:ring-blue-100/70
+      "
+                            />
+
+                            <p className="mt-2 text-xs font-medium leading-5 text-slate-400">
+                              Add one profile per line. You can include
+                              LinkedIn, Facebook, Instagram, YouTube, X, TikTok,
+                              or another public profile.
+                            </p>
+                          </label>
                         </SectionCard>
 
                         {/* PROMOTION */}
@@ -3035,14 +3129,14 @@ export default function ProfileEditor({
                           <div className="space-y-3">
                             <ToggleRow
                               title="Promote me personally"
-                              description="Surface my expertise, knowledge, contributions and participation."
+                              description="When turned off, About You section and personal interests will not appear on your public profile."
                               checked={promoteMePersonally}
                               onChange={setPromoteMePersonally}
                             />
 
                             <ToggleRow
                               title="Promote my business / organization"
-                              description="Surface the organization connected to my Profile."
+                              description="When turned off, professional and business / organization information will not appear on your public profile."
                               checked={promoteMyBusinessOrganization}
                               onChange={setPromoteMyBusinessOrganization}
                             />

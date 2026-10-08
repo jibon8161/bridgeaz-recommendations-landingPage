@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 const SUGGESTION_WEBHOOK_URL =
   "https://hook.us2.make.com/vauks401yxgsetpc4q69m8hca47hgpzs";
@@ -25,6 +25,44 @@ export default function InterestManager({ rawData, profile }) {
   const [interestTags, setInterestTags] = useState(initialInterestTags);
   const [savedInterestTags, setSavedInterestTags] =
     useState(initialInterestTags);
+  useEffect(() => {
+    const email = rawData?.email;
+
+    if (!email) return;
+
+    async function loadFreshInterests() {
+      try {
+        const res = await fetch(SAVE_INTERESTS_WEBHOOK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "get",
+            email,
+          }),
+        });
+
+        const data = await res.json();
+
+  if (!data.success || !data.interestTags) return;
+
+  const freshTags = String(data.interestTags)
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  if (freshTags.length > 0) {
+    setInterestTags(freshTags);
+    setSavedInterestTags(freshTags);
+  }
+      } catch (error) {
+        console.error("Could not load fresh interests:", error);
+      }
+    }
+
+    loadFreshInterests();
+  }, [rawData?.email]);
   const [newInterest, setNewInterest] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [interestStatus, setInterestStatus] = useState("");
@@ -148,7 +186,12 @@ export default function InterestManager({ rawData, profile }) {
         headers: {
           "Content-Type": "application/json",
         },
+        // body: JSON.stringify({
+        //   email: rawData?.email,
+        //   interestTags,
+        // }),
         body: JSON.stringify({
+          action: "save",
           email: rawData?.email,
           interestTags,
         }),
@@ -157,7 +200,14 @@ export default function InterestManager({ rawData, profile }) {
       const data = await res.json();
 
       if (data.success) {
-        setSavedInterestTags(interestTags);
+        const updatedTags = String(data.interestTags || "")
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        setInterestTags(updatedTags);
+        setSavedInterestTags(updatedTags);
+
         toast.success("Interests updated successfully!");
         setStatusType("success");
       } else {

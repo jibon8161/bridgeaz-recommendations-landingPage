@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 
+import PublicProfileView from "./PublicProfileView";
 const API_URL =
   "https://bridgeaz-recommendations-server.vercel.app/api/directory";
 
@@ -693,13 +694,21 @@ function SocialPill({ item, theme }) {
    MEMBER ROW
 ========================================================= */
 
-function MemberRow({ member, theme, index, expanded, onToggle, viewerToken }) {
+function MemberRow({
+  member,
+  theme,
+  index,
+  expanded,
+  onToggle,
+  onViewProfile,
+  viewerToken,
+}) {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followSubmitting, setFollowSubmitting] = useState(false);
   const [followError, setFollowError] = useState("");
-const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
-  "Everything",
-]);
+  const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
+    "Everything",
+  ]);
   const [showFollowOptions, setShowFollowOptions] = useState(false);
 
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -786,7 +795,7 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
     Boolean(member?.email) ||
     Boolean(member?.phone) ||
     socialLinks.length > 0;
-  
+
   async function handleFollow() {
     if (!viewerToken || !member?.profileMemberId || followSubmitting) {
       return;
@@ -981,7 +990,7 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
       className="
         group
         relative
-        overflow-hidden
+       overflow-visible
         border-b
         border-slate-100
         bg-white/70
@@ -1207,35 +1216,37 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
         >
           {/* FOLLOW */}
 
-          <motion.button
-            type="button"
-            onClick={() => {
-              if (isFollowing) {
-                handleUnfollow();
-              } else {
-                setShowFollowOptions((current) => !current);
+          <div className="group/follow relative">
+            <motion.button
+              type="button"
+              onClick={() => {
+                if (isFollowing) {
+                  handleUnfollow();
+                } else {
+                  setShowFollowOptions((current) => !current);
+                }
+              }}
+              disabled={
+                followSubmitting || !viewerToken || !member?.profileMemberId
               }
-            }}
-            disabled={
-              followSubmitting || !viewerToken || !member?.profileMemberId
-            }
-            whileHover={
-              isFollowing || followSubmitting
-                ? undefined
-                : {
-                    y: -2,
-                  }
-            }
-            whileTap={
-              isFollowing || followSubmitting
-                ? undefined
-                : {
-                    scale: 0.97,
-                  }
-            }
-            className="
+              whileHover={
+                isFollowing || followSubmitting
+                  ? undefined
+                  : {
+                      y: -2,
+                    }
+              }
+              whileTap={
+                isFollowing || followSubmitting
+                  ? undefined
+                  : {
+                      scale: 0.97,
+                    }
+              }
+              className="
       inline-flex
       h-10
+      w-full
       items-center
       justify-center
       rounded-full
@@ -1246,18 +1257,26 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
       transition
       disabled:cursor-default
     "
-            style={{
-              color: isFollowing ? "#047857" : theme.primary,
-              borderColor: isFollowing ? "#A7F3D0" : `${theme.primary}33`,
-              backgroundColor: isFollowing ? "#ECFDF5" : "#FFFFFF",
-            }}
-          >
-            {followSubmitting
-              ? "Updating..."
-              : isFollowing
-                ? "Unfollow"
-                : "+ Follow"}
-          </motion.button>
+              style={{
+                color: isFollowing ? "#047857" : theme.primary,
+                borderColor: isFollowing ? "#A7F3D0" : `${theme.primary}33`,
+                backgroundColor: isFollowing ? "#ECFDF5" : "#FFFFFF",
+              }}
+            >
+              {followSubmitting
+                ? "Updating..."
+                : isFollowing
+                  ? "Unfollow"
+                  : "+ Follow"}
+            </motion.button>
+
+            {!isFollowing && (
+              <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-xl bg-[#071A4A] px-3 py-2 text-center text-[11px] font-semibold leading-4 text-white opacity-0 shadow-xl transition-opacity group-hover/follow:opacity-100">
+                Follow this member to see more of their future Bridge
+                submissions in your Community Hub.
+              </div>
+            )}
+          </div>
 
           {/* CONNECT */}
 
@@ -1340,6 +1359,38 @@ const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
             {expanded ? "Close" : "Quick View"}
 
             <ChevronIcon open={expanded} />
+          </motion.button>
+          <motion.button
+            type="button"
+            onClick={onViewProfile}
+            whileHover={{
+              y: -2,
+            }}
+            whileTap={{
+              scale: 0.97,
+            }}
+            className="
+    col-span-2
+    inline-flex
+    h-10
+    items-center
+    justify-center
+    gap-2
+    rounded-full
+    border
+    px-5
+    text-xs
+    font-black
+    transition
+  "
+            style={{
+              color: theme.primary,
+              borderColor: `${theme.primary}33`,
+              backgroundColor: "#FFFFFF",
+            }}
+          >
+            View Profile
+            <span>↗</span>
           </motion.button>
         </div>
 
@@ -2561,6 +2612,7 @@ export default function LocalDirectory({ theme: suppliedTheme, viewerToken }) {
   const [error, setError] = useState("");
 
   const [expandedMember, setExpandedMember] = useState(null);
+  const [selectedPublicProfile, setSelectedPublicProfile] = useState(null);
 
   const [pagination, setPagination] = useState({
     page: 1,
@@ -3332,6 +3384,7 @@ export default function LocalDirectory({ theme: suppliedTheme, viewerToken }) {
                       key={memberKey}
                       member={member}
                       theme={theme}
+                      onViewProfile={() => setSelectedPublicProfile(member)}
                       index={index}
                       expanded={expandedMember === memberKey}
                       onToggle={() =>
@@ -3502,6 +3555,16 @@ export default function LocalDirectory({ theme: suppliedTheme, viewerToken }) {
           contribute to the community.
         </p>
       </div>
+      {selectedPublicProfile &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <PublicProfileView
+            member={selectedPublicProfile}
+            theme={theme}
+            onClose={() => setSelectedPublicProfile(null)}
+          />,
+          document.body,
+        )}
     </section>
   );
 }

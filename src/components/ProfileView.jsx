@@ -6,7 +6,7 @@ import FloatingScene from "./FloatingScene";
 
 import InterestManager from "./InterestManager";
 import ProfileRecommendations from "./ProfileRecommendations";
-
+import BridgeQuestionCard from "./BridgeQuestionCard";
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
   "https://bridgeaz-recommendations-server.vercel.app";
@@ -1464,22 +1464,40 @@ useEffect(() => {
      CONNECTION GROUPS
   ===================================================== */
 
-  const receivedConnections = useMemo(
-    () =>
-      connectionInbox.filter(
-        (connection) => connection?.direction === "received",
-      ),
-    [connectionInbox],
-  );
+const introducedConnections = useMemo(
+  () =>
+    connectionInbox.filter(
+      (connection) => connection?.isBridgeIntroduction === true,
+    ),
+  [connectionInbox],
+);
 
-  const sentConnections = useMemo(
-    () =>
-      connectionInbox.filter((connection) => connection?.direction === "sent"),
-    [connectionInbox],
-  );
+const receivedConnections = useMemo(
+  () =>
+    connectionInbox.filter(
+      (connection) =>
+        connection?.direction === "received" &&
+        connection?.isBridgeIntroduction !== true,
+    ),
+  [connectionInbox],
+);
 
-  const visibleConnections =
-    activeConnectionTab === "received" ? receivedConnections : sentConnections;
+const sentConnections = useMemo(
+  () =>
+    connectionInbox.filter(
+      (connection) =>
+        connection?.direction === "sent" &&
+        connection?.isBridgeIntroduction !== true,
+    ),
+  [connectionInbox],
+);
+
+const visibleConnections =
+  activeConnectionTab === "introduced"
+    ? introducedConnections
+    : activeConnectionTab === "received"
+      ? receivedConnections
+      : sentConnections;
 
   const unreadConnectionCount = useMemo(
     () =>
@@ -1701,6 +1719,23 @@ return (
               }}
             >
               Sent ({sentConnections.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveConnectionTab("introduced")}
+              className="rounded-full px-5 py-2.5 text-xs font-black transition cursor-pointer"
+              style={{
+                color:
+                  activeConnectionTab === "introduced" ? "#ffffff" : primary,
+
+                backgroundColor:
+                  activeConnectionTab === "introduced"
+                    ? primary
+                    : "transparent",
+              }}
+            >
+              Introductions ({introducedConnections.length})
             </button>
           </div>
 
@@ -2030,52 +2065,84 @@ return (
               !connectionMessagesError &&
               connectionMessages.length > 0 && (
                 <div className="space-y-4">
-                  {connectionMessages.map((item) => (
-                    <div
-                      key={item.messageRecordId}
-                      className={`flex ${
-                        item.isMine ? "justify-end" : "justify-start"
-                      }`}
-                    >
+                  {connectionMessages.map((item) => {
+                    const isBridge = item.senderMemberRecordId === "BRIDGE";
+
+                    if (isBridge) {
+                      return (
+                        <div
+                          key={item.messageRecordId}
+                          className="flex justify-center"
+                        >
+                          <div className="w-full max-w-[92%] rounded-[22px] border border-blue-100 bg-blue-50 px-5 py-4 text-center shadow-sm">
+                            <p
+                              className="text-[10px] font-black uppercase tracking-[0.18em]"
+                              style={{ color: secondary }}
+                            >
+                              Bridge
+                            </p>
+
+                            <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-600">
+                              {item.message}
+                            </p>
+
+                            {item.createdAt && (
+                              <p className="mt-2 text-[9px] font-bold text-slate-400">
+                                {new Date(item.createdAt).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
                       <div
-                        className="
-                      max-w-[82%]
-                      rounded-[22px]
-                      px-4
-                      py-3
-                      shadow-sm
-                    "
-                        style={{
-                          background: item.isMine
-                            ? `linear-gradient(
-                            135deg,
-                            ${primary},
-                            ${secondary}
-                          )`
-                            : "#ffffff",
-
-                          color: item.isMine ? "#ffffff" : "#334155",
-                        }}
+                        key={item.messageRecordId}
+                        className={`flex ${
+                          item.isMine ? "justify-end" : "justify-start"
+                        }`}
                       >
-                        <p className="whitespace-pre-wrap text-sm font-medium leading-6">
-                          {item.message}
-                        </p>
+                        <div
+                          className="
+          max-w-[82%]
+          rounded-[22px]
+          px-4
+          py-3
+          shadow-sm
+        "
+                          style={{
+                            background: item.isMine
+                              ? `linear-gradient(
+                135deg,
+                ${primary},
+                ${secondary}
+              )`
+                              : "#ffffff",
 
-                        {item.createdAt && (
-                          <p
-                            className={`
-                          mt-2
-                          text-[9px]
-                          font-bold
-                          ${item.isMine ? "text-white/60" : "text-slate-400"}
-                        `}
-                          >
-                            {new Date(item.createdAt).toLocaleString()}
+                            color: item.isMine ? "#ffffff" : "#334155",
+                          }}
+                        >
+                          <p className="whitespace-pre-wrap text-sm font-medium leading-6">
+                            {item.message}
                           </p>
-                        )}
+
+                          {item.createdAt && (
+                            <p
+                              className={`
+              mt-2
+              text-[9px]
+              font-bold
+              ${item.isMine ? "text-white/60" : "text-slate-400"}
+            `}
+                            >
+                              {new Date(item.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
           </div>
@@ -2844,22 +2911,40 @@ export default function ProfileView({ data, theme, onClose, onEdit }) {
     }
   }
 
-  const receivedConnections = useMemo(
-    () =>
-      connectionInbox.filter(
-        (connection) => connection?.direction === "received",
-      ),
-    [connectionInbox],
-  );
+const introducedConnections = useMemo(
+  () =>
+    connectionInbox.filter(
+      (connection) => connection?.isBridgeIntroduction === true,
+    ),
+  [connectionInbox],
+);
 
-  const sentConnections = useMemo(
-    () =>
-      connectionInbox.filter((connection) => connection?.direction === "sent"),
-    [connectionInbox],
-  );
+const receivedConnections = useMemo(
+  () =>
+    connectionInbox.filter(
+      (connection) =>
+        connection?.direction === "received" &&
+        connection?.isBridgeIntroduction !== true,
+    ),
+  [connectionInbox],
+);
 
-  const visibleConnections =
-    activeConnectionTab === "received" ? receivedConnections : sentConnections;
+const sentConnections = useMemo(
+  () =>
+    connectionInbox.filter(
+      (connection) =>
+        connection?.direction === "sent" &&
+        connection?.isBridgeIntroduction !== true,
+    ),
+  [connectionInbox],
+);
+
+const visibleConnections =
+  activeConnectionTab === "introduced"
+    ? introducedConnections
+    : activeConnectionTab === "received"
+      ? receivedConnections
+      : sentConnections;
   
 
 
@@ -3100,194 +3185,6 @@ const liveSharedCount = sharedContributions.length;
      BRIDGE QUESTIONS
   ===================================================== */
 
-  const [bridgeQuestions, setBridgeQuestions] = useState([]);
-
-  const [answeredQuestionNumbers, setAnsweredQuestionNumbers] = useState([]);
-
-  const [bridgeQuestionsLoading, setBridgeQuestionsLoading] = useState(
-    Boolean(token),
-  );
-
-  const [bridgeQuestionsError, setBridgeQuestionsError] = useState("");
-
-  const [bridgeAnswer, setBridgeAnswer] = useState("");
-
-  const [bridgeAnswerSubmitting, setBridgeAnswerSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!token) {
-      return undefined;
-    }
-
-    const controller = new AbortController();
-
-    async function loadBridgeQuestions() {
-      try {
-        const response = await fetch(
-          `${API_BASE}/api/profile/${encodeURIComponent(
-            token,
-          )}/bridge-questions`,
-          {
-            method: "GET",
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        );
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result?.error || "Could not load Bridge Questions.");
-        }
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        const questions = Array.isArray(result?.questions)
-          ? result.questions
-              .map((item) => ({
-                id: item?.id || "",
-
-                questionNumber: Number(item?.questionNumber),
-
-                question: item?.question || "",
-
-                bridgeQuestionSet: item?.bridgeQuestionSet || "",
-              }))
-              .filter(
-                (item) =>
-                  Number.isFinite(item.questionNumber) &&
-                  Boolean(item.question),
-              )
-          : [];
-
-        const answered = Array.isArray(result?.answeredQuestionNumbers)
-          ? result.answeredQuestionNumbers
-              .map((value) => Number(value))
-              .filter((value) => Number.isFinite(value))
-          : [];
-
-        setBridgeQuestions(questions);
-
-        setAnsweredQuestionNumbers([...new Set(answered)]);
-
-        setBridgeQuestionsError("");
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          return;
-        }
-
-        console.error("Bridge Questions error:", error);
-
-        setBridgeQuestionsError(
-          error?.message || "Bridge Questions are temporarily unavailable.",
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setBridgeQuestionsLoading(false);
-        }
-      }
-    }
-
-    loadBridgeQuestions();
-
-    return () => controller.abort();
-  }, [token]);
-
-  const nextBridgeQuestion = useMemo(() => {
-    const answered = new Set(answeredQuestionNumbers.map(Number));
-
-    return (
-      bridgeQuestions.find(
-        (item) => !answered.has(Number(item?.questionNumber)),
-      ) || null
-    );
-  }, [bridgeQuestions, answeredQuestionNumbers]);
-
-  const answeredCount = useMemo(() => {
-    const available = new Set(
-      bridgeQuestions.map((item) => Number(item.questionNumber)),
-    );
-
-    return answeredQuestionNumbers.filter((number) =>
-      available.has(Number(number)),
-    ).length;
-  }, [answeredQuestionNumbers, bridgeQuestions]);
-
-  const bridgeQuestionProgress = bridgeQuestions.length
-    ? Math.round((answeredCount / bridgeQuestions.length) * 100)
-    : 0;
-
-  const bridgeQuestionsComplete =
-    !bridgeQuestionsLoading &&
-    !bridgeQuestionsError &&
-    bridgeQuestions.length > 0 &&
-    !nextBridgeQuestion;
-
-  async function submitBridgeAnswer(event) {
-    event.preventDefault();
-
-    if (!token || !nextBridgeQuestion || bridgeAnswerSubmitting) {
-      return;
-    }
-
-    const cleanAnswer = bridgeAnswer.trim();
-
-    if (!cleanAnswer) {
-      setBridgeQuestionsError("Please enter an answer before submitting.");
-
-      return;
-    }
-
-    try {
-      setBridgeAnswerSubmitting(true);
-      setBridgeQuestionsError("");
-
-      const response = await fetch(
-        `${API_BASE}/api/profile/${encodeURIComponent(
-          token,
-        )}/bridge-questions/answer`,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-          },
-
-          body: JSON.stringify({
-            questionNumber: nextBridgeQuestion.questionNumber,
-
-            questionId: nextBridgeQuestion.id,
-
-            answer: cleanAnswer,
-          }),
-        },
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result?.error || "Could not submit your answer.");
-      }
-
-      const answeredNumber = Number(nextBridgeQuestion.questionNumber);
-
-      setAnsweredQuestionNumbers((current) => [
-        ...new Set([...current.map(Number), answeredNumber]),
-      ]);
-
-      setBridgeAnswer("");
-    } catch (error) {
-      console.error("Bridge Question submit error:", error);
-
-      setBridgeQuestionsError(
-        error?.message || "Could not submit your answer. Please try again.",
-      );
-    } finally {
-      setBridgeAnswerSubmitting(false);
-    }
-  }
 
   /* =====================================================
      INTERESTS
@@ -5670,518 +5567,11 @@ const liveSharedCount = sharedContributions.length;
           BRIDGE QUESTIONS
       ===================================================== */}
 
-      <section
-        className="
-          relative
-          z-10
-          px-4
-          py-5
-          md:px-6
-        "
-      >
-        <Reveal>
-          <div
-            className="
-              relative
-              mx-auto
-              grid
-              max-w-[1400px]
-              overflow-hidden
-              rounded-[42px]
-              border
-              border-white/70
-              bg-white/80
-              shadow-[0_32px_105px_rgba(15,23,42,.10)]
-              backdrop-blur-3xl
-              lg:grid-cols-[.82fr_1.18fr]
-            "
-          >
-            <div
-              className="
-                relative
-                overflow-hidden
-                p-7
-                text-white
-                md:p-10
-              "
-              style={{
-                background: `linear-gradient(
-                  145deg,
-                  ${primary},
-                  ${secondary}
-                )`,
-              }}
-            >
-              <motion.div
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.12, 0.28, 0.12],
-                }}
-                transition={{
-                  repeat: Infinity,
-                  duration: 6,
-                }}
-                className="
-                  absolute
-                  -right-20
-                  -top-20
-                  h-64
-                  w-64
-                  rounded-full
-                  bg-white
-                  blur-[90px]
-                "
-              />
+      {/* =====================================================
+    BRIDGE QUESTIONS
+===================================================== */}
 
-              <div className="relative z-10">
-                <Eyebrow secondary={secondary} light>
-                  <LimitedHoverHelp
-                    storageKey="bridge-questions"
-                    helpText="Bridge Questions help your profile learn from your experience, interests, and perspective so Bridge can build a richer and more useful living profile over time."
-                    secondary={secondary}
-                  >
-                    Bridge Questions
-                  </LimitedHoverHelp>
-                </Eyebrow>
-
-                <h2
-                  className="
-                    mt-5
-                    text-4xl
-                    font-black
-                    leading-tight
-                    tracking-[-0.05em]
-                    md:text-5xl
-                  "
-                >
-                  Your experience has value.
-                </h2>
-
-                <p
-                  className="
-                    mt-5
-                    max-w-xl
-                    text-sm
-                    font-medium
-                    leading-7
-                    text-white/75
-                  "
-                >
-                  Bridge asks one question at a time. Your answers help your
-                  Profile become richer and more useful.
-                </p>
-
-                <div
-                  className="
-                    mt-8
-                    rounded-[26px]
-                    border
-                    border-white/10
-                    bg-white/10
-                    p-5
-                    backdrop-blur-xl
-                  "
-                >
-                  <div
-                    className="
-                      flex
-                      items-end
-                      justify-between
-                      gap-4
-                    "
-                  >
-                    <div>
-                      <p
-                        className="
-                          text-[9px]
-                          font-black
-                          uppercase
-                          tracking-[0.18em]
-                          text-white/50
-                        "
-                      >
-                        Progress
-                      </p>
-
-                      <p
-                        className="
-                          mt-2
-                          text-3xl
-                          font-black
-                        "
-                      >
-                        {answeredCount}/{bridgeQuestions.length || 0}
-                      </p>
-                    </div>
-
-                    <p
-                      className="
-                        text-4xl
-                        font-black
-                        text-white/80
-                      "
-                    >
-                      {bridgeQuestionProgress}%
-                    </p>
-                  </div>
-
-                  <div
-                    className="
-                      mt-4
-                      h-2
-                      overflow-hidden
-                      rounded-full
-                      bg-white/10
-                    "
-                  >
-                    <motion.div
-                      initial={{
-                        width: 0,
-                      }}
-                      animate={{
-                        width: `${bridgeQuestionProgress}%`,
-                      }}
-                      transition={{
-                        duration: 0.9,
-                      }}
-                      className="
-                        h-full
-                        rounded-full
-                        bg-white
-                      "
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-7 md:p-10">
-              {bridgeQuestionsLoading && (
-                <div
-                  className="
-                    animate-pulse
-                    rounded-[28px]
-                    border
-                    border-slate-100
-                    bg-slate-50/70
-                    p-6
-                  "
-                >
-                  <div
-                    className="
-                      h-3
-                      w-28
-                      rounded-full
-                      bg-slate-200
-                    "
-                  />
-
-                  <div
-                    className="
-                      mt-4
-                      h-7
-                      w-4/5
-                      rounded-full
-                      bg-slate-200
-                    "
-                  />
-
-                  <div
-                    className="
-                      mt-5
-                      h-32
-                      rounded-3xl
-                      bg-slate-100
-                    "
-                  />
-                </div>
-              )}
-
-              {!bridgeQuestionsLoading && nextBridgeQuestion && (
-                <form onSubmit={submitBridgeAnswer}>
-                  {nextBridgeQuestion.bridgeQuestionSet && (
-                    <p
-                      className="
-                          text-[10px]
-                          font-black
-                          uppercase
-                          tracking-[0.18em]
-                        "
-                      style={{
-                        color: secondary,
-                      }}
-                    >
-                      {nextBridgeQuestion.bridgeQuestionSet}
-                    </p>
-                  )}
-
-                  <p
-                    className="
-                        mt-2
-                        text-xs
-                        font-black
-                        uppercase
-                        tracking-[0.14em]
-                        text-slate-400
-                      "
-                  >
-                    Question {nextBridgeQuestion.questionNumber}
-                  </p>
-
-                  <h3
-                    className="
-                        mt-4
-                        text-2xl
-                        font-black
-                        leading-8
-                        tracking-[-0.03em]
-                        md:text-3xl
-                      "
-                    style={{
-                      color: primary,
-                    }}
-                  >
-                    {nextBridgeQuestion.question}
-                  </h3>
-
-                  <textarea
-                    value={bridgeAnswer}
-                    onChange={(event) => {
-                      setBridgeAnswer(event.target.value);
-
-                      if (bridgeQuestionsError) {
-                        setBridgeQuestionsError("");
-                      }
-                    }}
-                    rows={6}
-                    maxLength={4000}
-                    placeholder="Write your answer here..."
-                    disabled={bridgeAnswerSubmitting}
-                    className="
-                        mt-6
-                        w-full
-                        resize-y
-                        rounded-[26px]
-                        border
-                        border-slate-200
-                        bg-white
-                        px-5
-                        py-4
-                        text-sm
-                        font-medium
-                        leading-7
-                        text-slate-700
-                        shadow-sm
-                        outline-none
-                        transition
-                        placeholder:text-slate-300
-                        focus:border-blue-300
-                        focus:ring-4
-                        focus:ring-blue-100/60
-                        disabled:opacity-60
-                      "
-                  />
-
-                  <div
-                    className="
-                        mt-4
-                        flex
-                        flex-col
-                        gap-3
-                        sm:flex-row
-                        sm:items-center
-                        sm:justify-between
-                      "
-                  >
-                    <p
-                      className="
-                          text-xs
-                          font-semibold
-                          text-slate-400
-                        "
-                    >
-                      {bridgeAnswer.length}/4000
-                    </p>
-
-                    <motion.button
-                      type="submit"
-                      disabled={bridgeAnswerSubmitting || !bridgeAnswer.trim()}
-                      whileHover={{
-                        y: -2,
-                      }}
-                      whileTap={{
-                        scale: 0.98,
-                      }}
-                      className="
-                          rounded-full
-                          px-7
-                          py-3.5
-                          text-sm
-                          font-black
-                          text-white
-                          shadow-[0_14px_35px_rgba(59,130,246,.25)]
-                          disabled:cursor-not-allowed
-                          disabled:opacity-50
-                        "
-                      style={{
-                        background: `linear-gradient(
-                            135deg,
-                            ${primary},
-                            ${secondary}
-                          )`,
-                      }}
-                    >
-                      {bridgeAnswerSubmitting
-                        ? "Submitting..."
-                        : "Submit Answer"}
-                    </motion.button>
-                  </div>
-
-                  {bridgeQuestionsError && (
-                    <p
-                      className="
-                          mt-4
-                          text-sm
-                          font-bold
-                          text-rose-600
-                        "
-                    >
-                      {bridgeQuestionsError}
-                    </p>
-                  )}
-                </form>
-              )}
-
-              {bridgeQuestionsComplete && (
-                <motion.div
-                  initial={{
-                    scale: 0.94,
-                    opacity: 0,
-                  }}
-                  animate={{
-                    scale: 1,
-                    opacity: 1,
-                  }}
-                  className="
-                    rounded-[30px]
-                    border
-                    border-emerald-100
-                    bg-emerald-50/80
-                    p-7
-                  "
-                >
-                  <div
-                    className="
-                      flex
-                      items-start
-                      gap-4
-                    "
-                  >
-                    <motion.div
-                      animate={{
-                        rotate: [0, 8, -8, 0],
-                      }}
-                      transition={{
-                        duration: 0.6,
-                      }}
-                      className="
-                        flex
-                        h-12
-                        w-12
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-2xl
-                        bg-white
-                        text-xl
-                        font-black
-                        text-emerald-600
-                        shadow-sm
-                      "
-                    >
-                      ✓
-                    </motion.div>
-
-                    <div>
-                      <h3
-                        className="
-                          text-xl
-                          font-black
-                          text-emerald-900
-                        "
-                      >
-                        You’re all caught up.
-                      </h3>
-
-                      <p
-                        className="
-                          mt-2
-                          text-sm
-                          font-medium
-                          leading-6
-                          text-emerald-700
-                        "
-                      >
-                        You’ve answered all currently available Bridge
-                        Questions.
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {!bridgeQuestionsLoading &&
-                bridgeQuestionsError &&
-                !nextBridgeQuestion && (
-                  <div
-                    className="
-                      rounded-[28px]
-                      border
-                      border-amber-100
-                      bg-amber-50/80
-                      p-6
-                    "
-                  >
-                    <p
-                      className="
-                        text-sm
-                        font-bold
-                        text-amber-800
-                      "
-                    >
-                      {bridgeQuestionsError}
-                    </p>
-                  </div>
-                )}
-
-              {!bridgeQuestionsLoading &&
-                !bridgeQuestionsError &&
-                bridgeQuestions.length === 0 && (
-                  <div
-                    className="
-                      rounded-[28px]
-                      border
-                      border-dashed
-                      border-slate-200
-                      bg-slate-50/70
-                      p-7
-                    "
-                  >
-                    <p
-                      className="
-                        text-sm
-                        font-bold
-                        text-slate-400
-                      "
-                    >
-                      There are no Bridge Questions available right now.
-                    </p>
-                  </div>
-                )}
-            </div>
-          </div>
-        </Reveal>
-      </section>
+      <BridgeQuestionCard token={token} theme={theme} variant="profile" />
 
       <ProfileRecommendations
         rawData={profileData}
@@ -6472,14 +5862,14 @@ const liveSharedCount = sharedContributions.length;
                         contribution?.originalTitle ||
                         "Bridge Contribution";
 
-const link = cleanExternalUrl(
-  contribution?.bridgePublishedLink ||
-    contribution?.["Bridge Published Link"] ||
-    contribution?.publishedLink ||
-    contribution?.link ||
-    contribution?.url ||
-    "",
-);
+                      const link = cleanExternalUrl(
+                        contribution?.bridgePublishedLink ||
+                          contribution?.["Bridge Published Link"] ||
+                          contribution?.publishedLink ||
+                          contribution?.link ||
+                          contribution?.url ||
+                          "",
+                      );
 
                       const submittedDate = formatContributionDate(
                         contribution?.submittedDate,
@@ -6737,6 +6127,23 @@ const link = cleanExternalUrl(
                 }}
               >
                 Sent ({sentConnections.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveConnectionTab("introduced")}
+                className="rounded-full px-5 py-2.5 text-xs font-black transition"
+                style={{
+                  color:
+                    activeConnectionTab === "introduced" ? "#ffffff" : primary,
+
+                  backgroundColor:
+                    activeConnectionTab === "introduced"
+                      ? primary
+                      : "transparent",
+                }}
+              >
+                Introductions ({introducedConnections.length})
               </button>
             </div>
 

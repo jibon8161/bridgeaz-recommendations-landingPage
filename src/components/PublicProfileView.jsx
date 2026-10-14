@@ -1092,7 +1092,7 @@ const websiteUrl = promoteBusiness ? cleanExternalUrl(website) : "";
             className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <ArrowLeftIcon />
-            <span className="hidden sm:inline">Back to Directory</span>
+            <span className="hidden sm:inline">Back</span>
             <span className="sm:hidden">Back</span>
           </button>
 

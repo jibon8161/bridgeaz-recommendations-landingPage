@@ -1,5 +1,6 @@
 // import { formatInTimeZone } from "date-fns-tz";
 import { useEffect, useMemo, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { useNavigate, useParams } from "react-router-dom";
@@ -9,7 +10,8 @@ import InterestManager from "./components/InterestManager";
 import LocalDirectory from "./components/LocalDirectory";
 import ProfileEditor from "./components/ProfileEditor";
 import { BridgeMessages } from "./components/ProfileView";
-
+import BridgeQuestionCard from "./components/BridgeQuestionCard";
+import PublicProfileView from "./components/PublicProfileView";
 // import { Swiper, SwiperSlide } from "swiper/react";
 // import { Navigation as SwiperNavigation, Pagination } from "swiper/modules";
 
@@ -508,6 +510,743 @@ const fakeNames = [
   "Jonathan",
 ];
 
+function PeopleRecommendationActions({
+  person,
+  viewerToken,
+  theme,
+  connectionRecordId,
+  onRecommendationHidden,
+}) {
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followSubmitting, setFollowSubmitting] = useState(false);
+  const [followError, setFollowError] = useState("");
+  const [showFollowOptions, setShowFollowOptions] = useState(false);
+
+  const [selectedFollowContentTypes, setSelectedFollowContentTypes] = useState([
+    "Everything",
+  ]);
+
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectionReason, setConnectionReason] = useState("Ask a question");
+  const [connectionMessage, setConnectionMessage] = useState("");
+  const [connectionSubmitting, setConnectionSubmitting] = useState(false);
+  const [connectionError, setConnectionError] = useState("");
+  const [connectionSent, setConnectionSent] = useState(false);
+  const [connectionAlreadyExists, setConnectionAlreadyExists] = useState(false);
+
+  const [
+    recommendationInterestSubmitting,
+    setRecommendationInterestSubmitting,
+  ] = useState(false);
+
+  const [recommendationInterested, setRecommendationInterested] =
+    useState(false);
+
+  const [recommendationInterestError, setRecommendationInterestError] =
+    useState("");
+
+  const memberRecordId = person?.profileMemberId || "";
+
+  const name =
+    person?.fullName ||
+    [person?.firstName, person?.lastName].filter(Boolean).join(" ") ||
+    "Bridge Member";
+
+  useEffect(() => {
+    if (!viewerToken || !memberRecordId) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadFollowStatus() {
+      try {
+        const response = await fetch(
+          "https://bridgeaz-recommendations-server.vercel.app/api/profile/follow-status",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              followerToken: viewerToken,
+              followingMemberRecordId: memberRecordId,
+            }),
+          },
+        );
+
+        const result = await response.json();
+
+        if (!active) {
+          return;
+        }
+
+        if (response.ok && result?.success === true) {
+          setIsFollowing(result.following === true);
+        }
+      } catch (error) {
+        console.error("People recommendation follow status error:", error);
+      }
+    }
+
+    loadFollowStatus();
+
+    return () => {
+      active = false;
+    };
+  }, [viewerToken, memberRecordId]);
+
+  function toggleFollowContentType(type) {
+    if (type === "Everything") {
+      setSelectedFollowContentTypes(["Everything"]);
+      return;
+    }
+
+    setSelectedFollowContentTypes((current) => {
+      const withoutEverything = current.filter((item) => item !== "Everything");
+
+      const alreadySelected = withoutEverything.includes(type);
+
+      const next = alreadySelected
+        ? withoutEverything.filter((item) => item !== type)
+        : [...withoutEverything, type];
+
+      return next.length > 0 ? next : ["Everything"];
+    });
+  }
+
+  async function handleFollow() {
+    if (!viewerToken || !memberRecordId || followSubmitting) {
+      return;
+    }
+
+    try {
+      setFollowSubmitting(true);
+      setFollowError("");
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/follow",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            followerToken: viewerToken,
+            followingMemberRecordId: memberRecordId,
+            followContentType: selectedFollowContentTypes,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(result?.error || "Could not follow this member.");
+      }
+
+      setIsFollowing(true);
+      setShowFollowOptions(false);
+    } catch (error) {
+      console.error("People recommendation follow error:", error);
+
+      setFollowError(error?.message || "Could not follow this member.");
+    } finally {
+      setFollowSubmitting(false);
+    }
+  }
+
+  async function handleUnfollow() {
+    if (!viewerToken || !memberRecordId || followSubmitting) {
+      return;
+    }
+
+    try {
+      setFollowSubmitting(true);
+      setFollowError("");
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/unfollow",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            followerToken: viewerToken,
+            followingMemberRecordId: memberRecordId,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(result?.error || "Could not unfollow this member.");
+      }
+
+      setIsFollowing(false);
+      setShowFollowOptions(false);
+      setSelectedFollowContentTypes(["Everything"]);
+    } catch (error) {
+      console.error("People recommendation unfollow error:", error);
+
+      setFollowError(error?.message || "Could not unfollow this member.");
+    } finally {
+      setFollowSubmitting(false);
+    }
+  }
+
+  async function handleRecommendationInterest() {
+    if (
+      !viewerToken ||
+      !connectionRecordId ||
+      recommendationInterestSubmitting
+    ) {
+      return;
+    }
+
+    try {
+      setRecommendationInterestSubmitting(true);
+      setRecommendationInterestError("");
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/people-recommendation/interested",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            viewerToken,
+            connectionRecordId,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(result?.error || "Could not save your interest.");
+      }
+
+      setRecommendationInterested(true);
+    } catch (error) {
+      console.error("PEOPLE RECOMMENDATION INTEREST ERROR:", error);
+
+      setRecommendationInterestError(
+        error?.message || "Could not save your interest.",
+      );
+    } finally {
+      setRecommendationInterestSubmitting(false);
+    }
+  }
+
+  async function handleHideRecommendation() {
+    if (!connectionRecordId || !viewerToken) return;
+
+    try {
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/people-recommendation/hide",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            viewerToken,
+            connectionRecordId,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(result?.error || "Could not hide recommendation.");
+      }
+
+      onRecommendationHidden?.();
+    } catch (error) {
+      console.error("HIDE RECOMMENDATION ERROR:", error);
+    }
+  }
+
+  async function handleConnectSubmit(event) {
+    event.preventDefault();
+
+    const cleanMessage = connectionMessage.trim();
+
+    if (
+      !viewerToken ||
+      !memberRecordId ||
+      !connectionReason ||
+      !cleanMessage ||
+      connectionSubmitting
+    ) {
+      return;
+    }
+
+    try {
+      setConnectionSubmitting(true);
+      setConnectionError("");
+      setConnectionSent(false);
+      setConnectionAlreadyExists(false);
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/connect/send",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            requesterToken: viewerToken,
+            targetMemberRecordId: memberRecordId,
+            connectionReason,
+            message: cleanMessage,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(
+          result?.error || "Could not send your connection message.",
+        );
+      }
+
+      if (result?.existingConnection === true) {
+        setConnectionAlreadyExists(true);
+        return;
+      }
+
+      setConnectionMessage("");
+      setConnectionSent(true);
+    } catch (error) {
+      console.error("People recommendation connect error:", error);
+
+      setConnectionError(
+        error?.message || "Could not send your connection message.",
+      );
+    } finally {
+      setConnectionSubmitting(false);
+    }
+  }
+  console.log("HIDE BUTTON DEBUG:", {
+    viewerToken,
+    connectionRecordId,
+  });
+  return (
+    <>
+      <div className="mt-6 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={handleRecommendationInterest}
+          disabled={
+            !viewerToken ||
+            !connectionRecordId ||
+            recommendationInterestSubmitting ||
+            recommendationInterested
+          }
+          className="col-span-2 inline-flex h-11 cursor-pointer items-center justify-center rounded-full px-4 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-default disabled:opacity-70"
+          style={{
+            background: recommendationInterested
+              ? "#059669"
+              : `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`,
+          }}
+        >
+          {recommendationInterestSubmitting
+            ? "Saving..."
+            : recommendationInterested
+              ? "✓ I'm Interested"
+              : "I'm Interested"}
+        </button>
+        <button
+          type="button"
+          onClick={handleHideRecommendation}
+          disabled={!viewerToken || !connectionRecordId}
+          className="col-span-2 inline-flex h-11 cursor-pointer items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-black text-rose-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-100 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Not for Me / Hide
+        </button>
+        <button
+          type="button"
+          disabled={followSubmitting || !viewerToken || !memberRecordId}
+          onClick={() => {
+            if (isFollowing) {
+              handleUnfollow();
+            } else {
+              setShowFollowOptions((current) => !current);
+            }
+          }}
+          className="inline-flex h-11 items-center justify-center rounded-full border px-4 text-xs font-black transition disabled:opacity-50"
+          style={{
+            color: isFollowing ? "#047857" : theme.primary,
+            borderColor: isFollowing ? "#A7F3D0" : `${theme.primary}33`,
+            backgroundColor: isFollowing ? "#ECFDF5" : "#FFFFFF",
+          }}
+        >
+          {followSubmitting
+            ? "Updating..."
+            : isFollowing
+              ? "Unfollow"
+              : "+ Follow"}
+        </button>
+      </div>
+
+      {showFollowOptions &&
+        !isFollowing &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[30000] flex items-center justify-center bg-[#071A4A]/70 p-4 backdrop-blur-md"
+            onClick={() => {
+              if (!followSubmitting) {
+                setShowFollowOptions(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{
+                opacity: 0,
+                scale: 0.94,
+                y: 20,
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                y: 0,
+              }}
+              transition={{
+                duration: 0.22,
+              }}
+              onClick={(event) => event.stopPropagation()}
+              className="relative w-full max-w-lg overflow-hidden rounded-[30px] bg-white shadow-[0_35px_120px_rgba(7,26,74,0.35)]"
+            >
+              {/* top accent */}
+              <div
+                className="h-1.5 w-full"
+                style={{
+                  background: `linear-gradient(
+              90deg,
+              ${theme.primary},
+              ${theme.secondary}
+            )`,
+                }}
+              />
+
+              <div className="p-6 md:p-8">
+                {/* header */}
+                <div className="flex items-start justify-between gap-5">
+                  <div>
+                    <p
+                      className="text-[10px] font-black uppercase tracking-[0.2em]"
+                      style={{
+                        color: theme.secondary,
+                      }}
+                    >
+                      Follow {name}
+                    </p>
+
+                    <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#071A4A]">
+                      What would you like to follow?
+                    </h2>
+
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Choose the types of updates you want Bridge to show you
+                      from this member.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={followSubmitting}
+                    onClick={() => setShowFollowOptions(false)}
+                    className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-slate-100 text-xl font-black text-slate-500 transition hover:bg-slate-200 disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* options */}
+                <div className="mt-7 flex flex-wrap gap-3">
+                  {[
+                    "Everything",
+                    "Events",
+                    "Articles",
+                    "Resources",
+                    "Classes / Workshops",
+                    "Books",
+                    "Community Activity",
+                  ].map((type) => {
+                    const selected = selectedFollowContentTypes.includes(type);
+
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        disabled={followSubmitting}
+                        onClick={() => toggleFollowContentType(type)}
+                        className="cursor-pointer rounded-full border px-4 py-3 text-xs font-black transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{
+                          color: selected ? "#FFFFFF" : theme.primary,
+
+                          background: selected
+                            ? `linear-gradient(
+                          135deg,
+                          ${theme.primary},
+                          ${theme.secondary}
+                        )`
+                            : "#FFFFFF",
+
+                          borderColor: selected ? theme.secondary : "#E2E8F0",
+
+                          boxShadow: selected
+                            ? `0 8px 24px ${theme.secondary}30`
+                            : "none",
+                        }}
+                      >
+                        {selected ? "✓ " : ""}
+                        {type}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* selected summary */}
+                <div className="mt-7 rounded-[20px] bg-slate-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Following
+                  </p>
+
+                  <p className="mt-2 text-sm font-bold text-[#071A4A]">
+                    {selectedFollowContentTypes.join(", ")}
+                  </p>
+                </div>
+
+                {followError && (
+                  <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600">
+                    {followError}
+                  </p>
+                )}
+
+                {/* footer buttons */}
+                <div className="mt-7 flex gap-3">
+                  <button
+                    type="button"
+                    disabled={followSubmitting}
+                    onClick={() => setShowFollowOptions(false)}
+                    className="flex-1 cursor-pointer rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleFollow}
+                    disabled={followSubmitting}
+                    className="flex-1 cursor-pointer rounded-2xl px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      background: `linear-gradient(
+                  135deg,
+                  ${theme.primary},
+                  ${theme.secondary}
+                )`,
+                    }}
+                  >
+                    {followSubmitting ? "Following..." : "Confirm Follow"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>,
+          document.body,
+        )}
+
+      {followError && (
+        <p className="mt-2 text-xs font-bold text-rose-600">{followError}</p>
+      )}
+      {recommendationInterestError && (
+        <p className="mt-2 text-xs font-bold text-rose-600">
+          {recommendationInterestError}
+        </p>
+      )}
+      {showConnectModal &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[20000] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+            onClick={() => {
+              if (!connectionSubmitting) {
+                setShowConnectModal(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{
+                opacity: 0,
+                scale: 0.95,
+                y: 20,
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                y: 0,
+              }}
+              onClick={(event) => event.stopPropagation()}
+              className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[30px] bg-white shadow-[0_35px_120px_rgba(15,23,42,.30)]"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+                <div>
+                  <p
+                    className="text-[9px] font-black uppercase tracking-[0.18em]"
+                    style={{
+                      color: theme.secondary,
+                    }}
+                  >
+                    Bridge Connect
+                  </p>
+
+                  <h2 className="mt-2 text-2xl font-black text-[#071A4A]">
+                    Connect with {name}
+                  </h2>
+
+                  <p className="mt-2 text-sm text-slate-500">
+                    Tell {name} why you'd like to connect.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={connectionSubmitting}
+                  onClick={() => setShowConnectModal(false)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 font-black text-slate-500"
+                >
+                  ×
+                </button>
+              </div>
+
+              <form onSubmit={handleConnectSubmit} className="p-6">
+                {connectionAlreadyExists ? (
+                  <div className="rounded-[22px] border border-blue-100 bg-blue-50 p-5">
+                    <p className="font-black text-blue-900">
+                      Conversation already open
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-blue-700">
+                      You already have an active Bridge conversation with {name}
+                      .
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {connectionSent && (
+                      <div className="mb-5 rounded-[20px] bg-emerald-50 px-4 py-4 text-sm font-black text-emerald-700">
+                        ✓ Connection message sent
+                      </div>
+                    )}
+
+                    <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                      Why are you connecting?
+                    </label>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {[
+                        "Ask a question",
+                        "Learn about their services",
+                        "Invite them to speak",
+                        "Collaborate",
+                        "Request a meeting",
+                        "Discuss a resource",
+                        "Invite them to an event",
+                        "Explore another opportunity",
+                      ].map((reason) => {
+                        const selected = connectionReason === reason;
+
+                        return (
+                          <button
+                            key={reason}
+                            type="button"
+                            disabled={connectionSubmitting}
+                            onClick={() => setConnectionReason(reason)}
+                            className="rounded-full border px-4 py-2.5 text-xs font-black"
+                            style={{
+                              color: selected ? "#FFFFFF" : theme.primary,
+                              backgroundColor: selected
+                                ? theme.primary
+                                : "#FFFFFF",
+                              borderColor: selected ? theme.primary : "#E2E8F0",
+                            }}
+                          >
+                            {selected ? "✓ " : ""}
+                            {reason}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-6">
+                      <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                        Your message
+                      </label>
+
+                      <textarea
+                        value={connectionMessage}
+                        onChange={(event) =>
+                          setConnectionMessage(event.target.value)
+                        }
+                        rows={5}
+                        maxLength={4000}
+                        disabled={connectionSubmitting}
+                        placeholder={`Write a message to ${name}...`}
+                        className="mt-3 w-full resize-y rounded-[22px] border border-slate-200 bg-slate-50/60 px-5 py-4 text-sm leading-7 text-slate-700 outline-none"
+                      />
+
+                      <p className="mt-2 text-[10px] text-slate-400">
+                        {connectionMessage.length}/4000
+                      </p>
+                    </div>
+
+                    {connectionError && (
+                      <div className="mt-4 rounded-[18px] bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                        {connectionError}
+                      </div>
+                    )}
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={
+                          connectionSubmitting ||
+                          !connectionMessage.trim() ||
+                          !connectionReason
+                        }
+                        className="rounded-full px-7 py-3.5 text-sm font-black text-white shadow-lg disabled:opacity-50"
+                        style={{
+                          background: `linear-gradient(
+                            135deg,
+                            ${theme.primary},
+                            ${theme.secondary}
+                          )`,
+                        }}
+                      >
+                        {connectionSubmitting
+                          ? "Sending..."
+                          : "Send Connection Message"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </form>
+            </motion.div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
 export default function PersonalizedRecommendationsPage() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -519,6 +1258,7 @@ export default function PersonalizedRecommendationsPage() {
 
   const [loading, setLoading] = useState(true);
   const [rawData, setRawData] = useState(null);
+  const [recommendationReloadKey, setRecommendationReloadKey] = useState(0);
   const [showIntro, setShowIntro] = useState(true);
   const [showAllFuture, setShowAllFuture] = useState(true);
   const [daysFilter, setDaysFilter] = useState(14);
@@ -529,62 +1269,88 @@ export default function PersonalizedRecommendationsPage() {
   const [showInterestModal, setShowInterestModal] = useState(false);
   const [showMessagesPanel, setShowMessagesPanel] = useState(false);
   const [unreadConnectionCount, setUnreadConnectionCount] = useState(0);
+  const [peopleRecommendations, setPeopleRecommendations] = useState([]);
+  const [selectedPublicProfile, setSelectedPublicProfile] = useState(null);
+  const [openPeopleBookId, setOpenPeopleBookId] = useState("");
+  const [peopleRecommendationsLoading, setPeopleRecommendationsLoading] =
+    useState(true);
 
-useEffect(() => {
-  let active = true;
+  const [peopleConnectionInvitations, setPeopleConnectionInvitations] =
+    useState([]);
 
-  const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-    if (!active) return;
+  const [
+    peopleConnectionInvitationsLoading,
+    setPeopleConnectionInvitationsLoading,
+  ] = useState(true);
 
-    if (!firebaseUser) {
-      navigate("/login", { replace: true });
-      return;
-    }
+  const [mutualPeopleConnections, setMutualPeopleConnections] = useState([]);
 
-    try {
-      const idToken = await firebaseUser.getIdToken();
+  const [mutualPeopleConnectionsLoading, setMutualPeopleConnectionsLoading] =
+    useState(true);
 
-      const response = await fetch(
-        `https://bridgeaz-recommendations-server.vercel.app/api/auth/my-bridge-access/${encodeURIComponent(
-          token,
-        )}`,
-        {
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-          },
-        },
-      );
+  const [
+    peopleConnectionInvitationSubmittingId,
+    setPeopleConnectionInvitationSubmittingId,
+  ] = useState("");
 
-      const data = await response.json();
+  const [peopleConnectionInvitationError, setPeopleConnectionInvitationError] =
+    useState("");
 
-      console.log("MY BRIDGE ACCESS:", data);
+  useEffect(() => {
+    let active = true;
 
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!active) return;
 
-      if (response.ok && data.allowed === true) {
-        setAccessAllowed(true);
-        setAccessChecked(true);
-      } else {
-        setAccessAllowed(false);
-        setAccessChecked(true);
-        navigate("/", { replace: true });
+      if (!firebaseUser) {
+        navigate("/login", { replace: true });
+        return;
       }
-    } catch (error) {
-      console.error("My Bridge access check failed:", error);
 
-      if (active) {
-        setAccessAllowed(false);
-        setAccessChecked(true);
-        navigate("/", { replace: true });
+      try {
+        const idToken = await firebaseUser.getIdToken();
+
+        const response = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/auth/my-bridge-access/${encodeURIComponent(
+            token,
+          )}`,
+          {
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+            },
+          },
+        );
+
+        const data = await response.json();
+
+        console.log("MY BRIDGE ACCESS:", data);
+
+        if (!active) return;
+
+        if (response.ok && data.allowed === true) {
+          setAccessAllowed(true);
+          setAccessChecked(true);
+        } else {
+          setAccessAllowed(false);
+          setAccessChecked(true);
+          navigate("/", { replace: true });
+        }
+      } catch (error) {
+        console.error("My Bridge access check failed:", error);
+
+        if (active) {
+          setAccessAllowed(false);
+          setAccessChecked(true);
+          navigate("/", { replace: true });
+        }
       }
-    }
-  });
+    });
 
-  return () => {
-    active = false;
-    unsubscribe();
-  };
-}, [token, navigate]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [token, navigate]);
 
   useEffect(() => {
     if (!accessAllowed) return;
@@ -631,90 +1397,144 @@ useEffect(() => {
     return () => {
       active = false;
     };
+  }, [token, accessAllowed, recommendationReloadKey]);
+
+  useEffect(() => {
+    if (!accessAllowed || !token) return;
+
+    let active = true;
+
+    async function fetchPeopleConnectionInvitations() {
+      try {
+        setPeopleConnectionInvitationsLoading(true);
+
+        const response = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+            token,
+          )}/people-connection-invitations`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+
+        const result = await response.json();
+
+        if (!active) return;
+
+        if (!response.ok || result?.success !== true) {
+          throw new Error(
+            result?.error || "Could not load connection invitations.",
+          );
+        }
+
+        const invitations = Array.isArray(result?.invitations)
+          ? result.invitations
+          : [];
+
+        setPeopleConnectionInvitations(invitations);
+
+        console.log("PEOPLE CONNECTION INVITATIONS:", invitations);
+      } catch (error) {
+        console.error("PEOPLE CONNECTION INVITATIONS ERROR:", error);
+
+        if (active) {
+          setPeopleConnectionInvitations([]);
+        }
+      } finally {
+        if (active) {
+          setPeopleConnectionInvitationsLoading(false);
+        }
+      }
+    }
+
+    fetchPeopleConnectionInvitations();
+
+    return () => {
+      active = false;
+    };
   }, [token, accessAllowed]);
 
-useEffect(() => {
-  if (autoProfileProcessStartedRef.current || !token || !rawData) {
-    return;
-  }
+  useEffect(() => {
+    if (!accessAllowed || !token) return;
 
-  async function autoTriggerProfileUpdate() {
-    try {
-      // Check submissions first
-      const contributionResponse = await fetch(
-        `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
-          token,
-        )}/contributions`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
-      );
+    let active = true;
 
-      const contributionResult = await contributionResponse.json();
+    async function fetchMutualPeopleConnections() {
+      try {
+        setMutualPeopleConnectionsLoading(true);
 
-      if (!contributionResponse.ok) {
-        throw new Error(
-          contributionResult?.error || "Could not check submissions.",
+        const response = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+            token,
+          )}/mutual-people-connections`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
         );
+
+        const result = await response.json();
+
+        if (!active) return;
+
+        if (!response.ok || result?.success !== true) {
+          throw new Error(
+            result?.error || "Could not load mutual connections.",
+          );
+        }
+
+        const connections = Array.isArray(result?.connections)
+          ? result.connections
+          : [];
+
+        setMutualPeopleConnections(connections);
+
+        console.log("MUTUAL PEOPLE CONNECTIONS:", connections);
+      } catch (error) {
+        console.error("MUTUAL PEOPLE CONNECTIONS ERROR:", error);
+
+        if (active) {
+          setMutualPeopleConnections([]);
+        }
+      } finally {
+        if (active) {
+          setMutualPeopleConnectionsLoading(false);
+        }
       }
+    }
 
-      const realSubmissions = Array.isArray(contributionResult?.contributions)
-        ? contributionResult.contributions.filter((item) =>
-            Boolean(item?.recordId),
-          )
-        : [];
+    fetchMutualPeopleConnections();
 
-      console.log(
-        "REAL SUBMISSIONS FOUND:",
-        realSubmissions.length,
-        realSubmissions,
-      );
+    return () => {
+      active = false;
+    };
+  }, [token, accessAllowed]);
 
-      // No real Airtable submission = stop here
-      if (realSubmissions.length === 0) {
-        console.log("AUTO PROFILE UPDATE SKIPPED - NO SUBMISSIONS");
-        return;
-      }
+  async function handlePeopleInvitationInterest(connectionRecordId) {
+    if (!token) {
+      return;
+    }
 
-      autoProfileProcessStartedRef.current = true;
+    if (!connectionRecordId || peopleConnectionInvitationSubmittingId) {
+      return;
+    }
 
-      // Same working PATCH as Save Profile
+    try {
+      setPeopleConnectionInvitationSubmittingId(connectionRecordId);
+
+      setPeopleConnectionInvitationError("");
+
       const response = await fetch(
-        `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
-          token,
-        )}`,
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/people-connection-invitation/interested",
         {
-          method: "PATCH",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            profileBio: rawData?.profileBio || "",
-            profileStatus: rawData?.profileStatus || "",
-
-            website: rawData?.website || "",
-            expertise: rawData?.expertise || "",
-            socialLinks: rawData?.socialLinks || "",
-            additionalAffiliations: rawData?.additionalAffiliations || "",
-
-            promoteMePersonally: rawData?.promoteMePersonally === true,
-
-            promoteMyBusinessOrganization:
-              rawData?.promoteMyBusinessOrganization === true,
-
-            whatIWantBridgeToPromote: rawData?.whatIWantBridgeToPromote || "",
-
-            openToOpportunities: rawData?.openToOpportunities === true,
-
-            opportunityTypes: rawData?.opportunityTypes || "",
-
-            showEmailInDirectory: rawData?.showEmailInDirectory === true,
-
-            showPhoneInDirectory: rawData?.showPhoneInDirectory === true,
-
-            showSocialLinksInDirectory:
-              rawData?.showSocialLinksInDirectory === true,
+            viewerToken: token,
+            connectionRecordId,
           }),
         },
       );
@@ -723,22 +1543,290 @@ useEffect(() => {
 
       if (!response.ok || result?.success !== true) {
         throw new Error(
-          result?.details ||
-            result?.error ||
-            "Automatic profile update failed.",
+          result?.error || "Could not accept this connection invitation.",
         );
       }
 
-      console.log("PROFILE UPDATE WEBHOOK AUTO TRIGGERED");
+      setPeopleConnectionInvitations((current) =>
+        current.filter(
+          (invitation) => invitation.connectionRecordId !== connectionRecordId,
+        ),
+      );
     } catch (error) {
-      console.error("AUTO PROFILE UPDATE ERROR:", error);
+      console.error("PEOPLE CONNECTION INVITATION INTEREST ERROR:", error);
 
-      autoProfileProcessStartedRef.current = false;
+      setPeopleConnectionInvitationError(
+        error?.message || "Could not accept this connection invitation.",
+      );
+    } finally {
+      setPeopleConnectionInvitationSubmittingId("");
     }
   }
 
-  void autoTriggerProfileUpdate();
-}, [token, rawData]);
+  async function handlePeopleInvitationDecline(connectionRecordId) {
+    if (!token) {
+      return;
+    }
+
+    if (!connectionRecordId || peopleConnectionInvitationSubmittingId) {
+      return;
+    }
+
+    try {
+      setPeopleConnectionInvitationSubmittingId(connectionRecordId);
+
+      setPeopleConnectionInvitationError("");
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/people-connection-invitation/decline",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            viewerToken: token,
+            connectionRecordId,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(
+          result?.error || "Could not decline this connection invitation.",
+        );
+      }
+
+      setPeopleConnectionInvitations((current) =>
+        current.filter(
+          (invitation) => invitation.connectionRecordId !== connectionRecordId,
+        ),
+      );
+    } catch (error) {
+      console.error("PEOPLE CONNECTION INVITATION DECLINE ERROR:", error);
+
+      setPeopleConnectionInvitationError(
+        error?.message || "Could not decline this connection invitation.",
+      );
+    } finally {
+      setPeopleConnectionInvitationSubmittingId("");
+    }
+  }
+
+  useEffect(() => {
+    if (!accessAllowed || !token) return;
+
+    let active = true;
+
+    async function fetchPeopleRecommendations() {
+      try {
+        setPeopleRecommendationsLoading(true);
+
+        const response = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+            token,
+          )}/people-recommendations`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+
+        const result = await response.json();
+
+        if (!active) return;
+
+        if (!response.ok || result?.success !== true) {
+          throw new Error(
+            result?.error || "Could not load people recommendations.",
+          );
+        }
+
+        const allPeopleRecommendations = Array.isArray(result?.recommendations)
+          ? result.recommendations
+          : [];
+
+        /*
+  Show only the latest generated Make batch.
+
+  Recommendations created by the same Make run should be
+  created only a few seconds apart.
+*/
+        const datedRecommendations = allPeopleRecommendations
+          .map((recommendation) => ({
+            recommendation,
+            createdTime: new Date(recommendation?.createdAt || "").getTime(),
+          }))
+          .filter(
+            (item) => Number.isFinite(item.createdTime) && item.createdTime > 0,
+          )
+          .sort((a, b) => b.createdTime - a.createdTime);
+
+        let latestBatch = [];
+
+        if (datedRecommendations.length > 0) {
+          latestBatch.push(datedRecommendations[0]);
+
+          const SAME_BATCH_GAP_MS = 10000; // 10 seconds
+
+          for (let index = 1; index < datedRecommendations.length; index += 1) {
+            const previousItem = latestBatch[latestBatch.length - 1];
+            const currentItem = datedRecommendations[index];
+
+            const timeGap = previousItem.createdTime - currentItem.createdTime;
+
+            if (timeGap > SAME_BATCH_GAP_MS) {
+              break;
+            }
+
+            latestBatch.push(currentItem);
+          }
+        }
+
+        const latestPeopleRecommendations =
+          latestBatch.length > 0
+            ? latestBatch
+                .map((item) => item.recommendation)
+                .sort(
+                  (a, b) =>
+                    Number(b?.matchScore || 0) - Number(a?.matchScore || 0),
+                )
+            : allPeopleRecommendations;
+
+        setPeopleRecommendations(latestPeopleRecommendations);
+
+        console.log(
+          "LATEST PEOPLE RECOMMENDATION BATCH:",
+          latestPeopleRecommendations,
+        );
+      } catch (error) {
+        console.error("PEOPLE RECOMMENDATIONS ERROR:", error);
+
+        if (active) {
+          setPeopleRecommendations([]);
+        }
+      } finally {
+        if (active) {
+          setPeopleRecommendationsLoading(false);
+        }
+      }
+    }
+
+    fetchPeopleRecommendations();
+
+    return () => {
+      active = false;
+    };
+  }, [token, accessAllowed, recommendationReloadKey]);
+
+  useEffect(() => {
+    if (autoProfileProcessStartedRef.current || !token || !rawData) {
+      return;
+    }
+
+    async function autoTriggerProfileUpdate() {
+      try {
+        // Check submissions first
+        const contributionResponse = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+            token,
+          )}/contributions`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+
+        const contributionResult = await contributionResponse.json();
+
+        if (!contributionResponse.ok) {
+          throw new Error(
+            contributionResult?.error || "Could not check submissions.",
+          );
+        }
+
+        const realSubmissions = Array.isArray(contributionResult?.contributions)
+          ? contributionResult.contributions.filter((item) =>
+              Boolean(item?.recordId),
+            )
+          : [];
+
+        console.log(
+          "REAL SUBMISSIONS FOUND:",
+          realSubmissions.length,
+          realSubmissions,
+        );
+
+        // No real Airtable submission = stop here
+        if (realSubmissions.length === 0) {
+          console.log("AUTO PROFILE UPDATE SKIPPED - NO SUBMISSIONS");
+          return;
+        }
+
+        autoProfileProcessStartedRef.current = true;
+
+        // Same working PATCH as Save Profile
+        const response = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+            token,
+          )}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              profileBio: rawData?.profileBio || "",
+              profileStatus: rawData?.profileStatus || "",
+
+              website: rawData?.website || "",
+              expertise: rawData?.expertise || "",
+              socialLinks: rawData?.socialLinks || "",
+              additionalAffiliations: rawData?.additionalAffiliations || "",
+
+              promoteMePersonally: rawData?.promoteMePersonally === true,
+
+              promoteMyBusinessOrganization:
+                rawData?.promoteMyBusinessOrganization === true,
+
+              whatIWantBridgeToPromote: rawData?.whatIWantBridgeToPromote || "",
+
+              openToOpportunities: rawData?.openToOpportunities === true,
+
+              opportunityTypes: rawData?.opportunityTypes || "",
+
+              showEmailInDirectory: rawData?.showEmailInDirectory === true,
+
+              showPhoneInDirectory: rawData?.showPhoneInDirectory === true,
+
+              showSocialLinksInDirectory:
+                rawData?.showSocialLinksInDirectory === true,
+            }),
+          },
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || result?.success !== true) {
+          throw new Error(
+            result?.details ||
+              result?.error ||
+              "Automatic profile update failed.",
+          );
+        }
+
+        console.log("PROFILE UPDATE WEBHOOK AUTO TRIGGERED");
+      } catch (error) {
+        console.error("AUTO PROFILE UPDATE ERROR:", error);
+
+        autoProfileProcessStartedRef.current = false;
+      }
+    }
+
+    void autoTriggerProfileUpdate();
+  }, [token, rawData]);
 
   const profile = useMemo(() => {
     if (!rawData) return null;
@@ -763,9 +1851,9 @@ useEffect(() => {
 
   // loading && console.log("LOADING RECOMMENDATIONS...");
 
-if (!accessChecked || !accessAllowed || loading) {
-  return <LoadingScreen />;
-}
+  if (!accessChecked || !accessAllowed || loading) {
+    return <LoadingScreen />;
+  }
 
   if (!profile) return <ErrorState />;
 
@@ -833,35 +1921,37 @@ if (!accessChecked || !accessAllowed || loading) {
       ? allFutureItems
       : filteredItems;
 
-const filteredFollowedCommunityItems = followedCommunityItems.filter((item) => {
-  if (showAllFuture) return true;
-  if (!item.rawDate) return false;
+  const filteredFollowedCommunityItems = followedCommunityItems.filter(
+    (item) => {
+      if (showAllFuture) return true;
+      if (!item.rawDate) return false;
 
-  const itemUTC = getUTCDateOnly(item.rawDate);
+      const itemUTC = getUTCDateOnly(item.rawDate);
 
-  return itemUTC >= todayUTC && itemUTC <= endUTC;
-});
+      return itemUTC >= todayUTC && itemUTC <= endUTC;
+    },
+  );
 
-const followedCommunityBaseItems =
-  activeSection === "hub" &&
-  communityFilter !== "all" &&
-  communityFilter !== "An activity, event, class, or opportunity"
-    ? followedCommunityItems
-    : filteredFollowedCommunityItems;
+  const followedCommunityBaseItems =
+    activeSection === "hub" &&
+    communityFilter !== "all" &&
+    communityFilter !== "An activity, event, class, or opportunity"
+      ? followedCommunityItems
+      : filteredFollowedCommunityItems;
 
-const allCommunityItems = [
-  ...communityBaseItems.filter((item) => {
-    return item.type?.toLowerCase().trim() === "submission";
-  }),
-  ...followedCommunityBaseItems,
-];
+  const allCommunityItems = [
+    ...communityBaseItems.filter((item) => {
+      return item.type?.toLowerCase().trim() === "submission";
+    }),
+    ...followedCommunityBaseItems,
+  ];
 
-const allFutureCommunityItems = [
-  ...allFutureItems.filter((item) => {
-    return item.type?.toLowerCase().trim() === "submission";
-  }),
-  ...followedCommunityItems,
-];
+  const allFutureCommunityItems = [
+    ...allFutureItems.filter((item) => {
+      return item.type?.toLowerCase().trim() === "submission";
+    }),
+    ...followedCommunityItems,
+  ];
 
   const communityCategories = [
     // "all",
@@ -1395,6 +2485,986 @@ const allFutureCommunityItems = [
         onOpenMessages={() => setShowMessagesPanel(true)}
       />
 
+      <BridgeQuestionCard
+        token={token}
+        theme={profile?.theme}
+        variant="bridge-pick"
+        onAnswered={() => {
+          setRecommendationReloadKey((prev) => prev + 1);
+        }}
+      />
+
+      {/* Mutual People Connections */}
+      {(mutualPeopleConnectionsLoading ||
+        mutualPeopleConnections.length > 0) && (
+        <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-10">
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <div className="mb-6">
+              <p
+                className="text-sm font-black uppercase tracking-[0.28em]"
+                style={{
+                  color: profile.theme.secondary,
+                }}
+              >
+                Mutual Interest
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black text-[#071A4A]">
+                You Both Want to Connect
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-slate-600">
+                Great news — you both said you’re interested in connecting.
+              </p>
+            </div>
+
+            {mutualPeopleConnectionsLoading ? (
+              <div className="rounded-3xl bg-white/80 p-8 text-center shadow-lg">
+                <p className="font-bold text-slate-500">
+                  Loading mutual connections...
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {mutualPeopleConnections.map((connection) => {
+                  const person = connection?.person || {};
+
+                  const role = Array.isArray(person.role)
+                    ? person.role.join(", ")
+                    : person.role || "";
+
+                  const subtitle = [role, person.businessOrganization]
+                    .filter(Boolean)
+                    .join(" · ");
+
+                  return (
+                    <motion.div
+                      key={connection.connectionRecordId}
+                      initial={{
+                        opacity: 0,
+                        y: 20,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                      }}
+                      className="relative overflow-hidden rounded-[30px] border-2 border-emerald-200 bg-white p-6 shadow-[0_20px_55px_rgba(7,26,74,0.12)]"
+                    >
+                      <div className="mb-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-700">
+                        ✓ Mutual Interest
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        {person.profilePhoto ? (
+                          <img
+                            src={person.profilePhoto}
+                            alt={person.fullName || "Bridge member"}
+                            className="h-16 w-16 rounded-full object-cover shadow-md"
+                          />
+                        ) : (
+                          <div
+                            className="flex h-16 w-16 items-center justify-center rounded-full text-xl font-black text-white shadow-md"
+                            style={{
+                              background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
+                            }}
+                          >
+                            {(person.firstName || person.fullName || "B")
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <h3 className="truncate text-xl font-black text-[#071A4A]">
+                            {person.fullName || "Bridge Member"}
+                          </h3>
+
+                          {subtitle && (
+                            <p className="mt-1 text-sm font-semibold text-slate-500">
+                              {subtitle}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {connection.matchEvidence && (
+                        <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+                            Why Bridge connected you
+                          </p>
+
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {connection.matchEvidence}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="mt-5 rounded-2xl bg-emerald-50 p-4 text-center">
+                        <p className="text-sm font-black text-emerald-700">
+                          You both expressed interest 🎉
+                        </p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Bridge Connection Invitations */}
+      {(peopleConnectionInvitationsLoading ||
+        peopleConnectionInvitations.length > 0) && (
+        <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-10">
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <div className="mb-6">
+              <p
+                className="text-sm font-black uppercase tracking-[0.28em]"
+                style={{
+                  color: profile.theme.secondary,
+                }}
+              >
+                Connection Invitations
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black text-[#071A4A]">
+                Someone Would Like to Connect
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-slate-600">
+                Bridge found a connection that may be valuable to both of you.
+              </p>
+            </div>
+
+            {peopleConnectionInvitationsLoading ? (
+              <div className="rounded-3xl bg-white/80 p-8 text-center shadow-lg">
+                <p className="font-bold text-slate-500">
+                  Loading connection invitations...
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {peopleConnectionInvitations.map((invitation) => {
+                  const person = invitation?.person || {};
+
+                  const role = Array.isArray(person.role)
+                    ? person.role.join(", ")
+                    : person.role || "";
+
+                  const subtitle = [role, person.businessOrganization]
+                    .filter(Boolean)
+                    .join(" · ");
+
+                  return (
+                    <motion.div
+                      key={invitation.connectionRecordId}
+                      initial={{
+                        opacity: 0,
+                        y: 20,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                      }}
+                      className="relative overflow-hidden rounded-[30px] border-2 border-amber-200 bg-white p-6 shadow-[0_20px_55px_rgba(7,26,74,0.12)]"
+                    >
+                      <div className="mb-4 inline-flex rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-amber-700">
+                        Bridge Invitation
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPublicProfile(person)}
+                        className="group/profile flex w-full cursor-pointer items-center gap-4 rounded-[20px] p-2 text-left transition duration-200 hover:bg-slate-50"
+                      >
+                        {person.profilePhoto ? (
+                          <img
+                            src={person.profilePhoto}
+                            alt={person.fullName || "Bridge member"}
+                            className="h-16 w-16 shrink-0 rounded-full object-cover shadow-md transition duration-200 group-hover/profile:scale-105"
+                          />
+                        ) : (
+                          <div
+                            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-black text-white shadow-md transition duration-200 group-hover/profile:scale-105"
+                            style={{
+                              background: `linear-gradient(
+          135deg,
+          ${profile.theme.primary},
+          ${profile.theme.secondary}
+        )`,
+                            }}
+                          >
+                            {(person.firstName || person.fullName || "B")
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-xl font-black text-[#071A4A] transition group-hover/profile:underline">
+                            {person.fullName || "Bridge Member"}
+                          </h3>
+
+                          {subtitle && (
+                            <p className="mt-1 text-sm font-semibold text-slate-500">
+                              {subtitle}
+                            </p>
+                          )}
+
+                          <p
+                            className="mt-2 inline-flex items-center gap-1 text-[11px] font-black"
+                            style={{
+                              color: profile.theme.secondary,
+                            }}
+                          >
+                            View Public Profile
+                            <span className="transition-transform duration-200 group-hover/profile:translate-x-1">
+                              →
+                            </span>
+                          </p>
+                        </div>
+                      </button>
+
+                      {invitation.matchEvidence && (
+                        <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+                            Why Bridge thinks you should connect
+                          </p>
+
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {invitation.matchEvidence}
+                          </p>
+                        </div>
+                      )}
+                      <div className="mt-5">
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handlePeopleInvitationInterest(
+                                invitation.connectionRecordId,
+                              )
+                            }
+                            disabled={
+                              peopleConnectionInvitationSubmittingId ===
+                              invitation.connectionRecordId
+                            }
+                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-full px-4 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                            style={{
+                              background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
+                            }}
+                          >
+                            I'm Interested
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handlePeopleInvitationDecline(
+                                invitation.connectionRecordId,
+                              )
+                            }
+                            disabled={
+                              peopleConnectionInvitationSubmittingId ===
+                              invitation.connectionRecordId
+                            }
+                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-black text-rose-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-100 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Not Interested
+                          </button>
+                        </div>
+
+                        {peopleConnectionInvitationError && (
+                          <p className="mt-3 text-center text-xs font-bold text-rose-600">
+                            {peopleConnectionInvitationError}
+                          </p>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Local People We Think You Should Connect With */}
+      {/* Local People We Think You Should Connect With */}
+      <section className="relative z-10 px-4 pb-12 md:px-6 md:pb-16">
+        <div className="mx-auto w-full max-w-7xl px-0 md:px-4">
+          {/* ========================================================= */}
+          {/* SECTION HEADER */}
+          {/* ========================================================= */}
+
+          <div className="mb-8 px-4 md:mb-10 md:px-0">
+            <div
+              className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.25em]"
+              style={{
+                color: profile.theme.secondary,
+              }}
+            >
+              <motion.span
+                animate={{
+                  opacity: [0.4, 1, 0.4],
+                  scale: [1, 1.3, 1],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2,
+                  ease: "easeInOut",
+                }}
+                className="h-2.5 w-2.5 rounded-full"
+                style={{
+                  backgroundColor: profile.theme.secondary,
+                  boxShadow: `0 0 14px ${profile.theme.secondary}`,
+                }}
+              />
+              Bridge Connections
+            </div>
+
+            <h2 className="mt-3 max-w-4xl text-3xl font-black tracking-[-0.04em] text-[#071A4A] md:text-4xl">
+              Local People We Think You Should Connect With
+            </h2>
+
+            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+              People Bridge believes may be valuable for you to know based on
+              your interests, goals, and local connections.
+            </p>
+
+            {/* MOBILE SWIPE HINT */}
+            {peopleRecommendations.length > 1 &&
+              !peopleRecommendationsLoading && (
+                <div className="mt-5 flex items-center justify-between md:hidden">
+                  <p className="text-xs font-bold text-slate-400">
+                    Swipe to explore connections
+                  </p>
+
+                  <motion.div
+                    animate={{
+                      x: [0, 6, 0],
+                    }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 1.5,
+                      ease: "easeInOut",
+                    }}
+                    className="flex items-center gap-1 text-sm font-black"
+                    style={{
+                      color: profile.theme.secondary,
+                    }}
+                  >
+                    <span>Swipe</span>
+                    <span>→</span>
+                  </motion.div>
+                </div>
+              )}
+          </div>
+
+          {/* ========================================================= */}
+          {/* LOADING */}
+          {/* ========================================================= */}
+
+          {peopleRecommendationsLoading ? (
+            <div className="mx-4 rounded-[30px] bg-[#071A4A] p-10 text-center shadow-[0_24px_70px_rgba(7,26,74,0.20)] md:mx-0">
+              <motion.div
+                animate={{
+                  rotate: 360,
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 1,
+                  ease: "linear",
+                }}
+                className="mx-auto h-10 w-10 rounded-full border-4 border-white/20"
+                style={{
+                  borderTopColor: profile.theme.secondary,
+                }}
+              />
+
+              <p className="mt-5 font-black text-white">
+                Finding strong local connections...
+              </p>
+            </div>
+          ) : peopleRecommendations.length === 0 ? (
+            /* ======================================================= */
+            /* EMPTY */
+            /* ======================================================= */
+
+            <div className="mx-4 rounded-[30px] bg-[#071A4A] p-10 text-center shadow-[0_24px_70px_rgba(7,26,74,0.20)] md:mx-0">
+              <div
+                className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-black"
+                style={{
+                  color: profile.theme.secondary,
+                  backgroundColor: `${profile.theme.secondary}18`,
+                }}
+              >
+                ✦
+              </div>
+
+              <p className="mt-5 text-lg font-black text-white">
+                No strong people matches yet.
+              </p>
+
+              <p className="mt-2 text-sm text-white/60">
+                Bridge will keep looking as it learns more about you.
+              </p>
+            </div>
+          ) : (
+            /* ======================================================= */
+            /* MOBILE SLIDER / DESKTOP GRID */
+            /* ======================================================= */
+
+            <div
+              className="
+          flex
+          snap-x
+          snap-mandatory
+          gap-5
+          overflow-x-auto
+          overflow-y-hidden
+          overscroll-x-contain
+          scroll-smooth
+          px-4
+          pb-10
+          touch-pan-x
+          [-ms-overflow-style:none]
+          [scrollbar-width:none]
+          [&::-webkit-scrollbar]:hidden
+
+          md:grid
+          md:grid-cols-2
+          md:gap-8
+          md:overflow-visible
+          md:px-0
+          md:pb-0
+
+          xl:grid-cols-3
+        "
+            >
+              {peopleRecommendations.map((recommendation, index) => {
+                const person = recommendation?.person || {};
+
+                const role = Array.isArray(person.role)
+                  ? person.role.join(", ")
+                  : person.role || "";
+
+                const subtitle = [role, person.businessOrganization]
+                  .filter(Boolean)
+                  .join(" · ");
+
+                const isBookOpen =
+                  openPeopleBookId === recommendation.connectionRecordId;
+
+                return (
+                  <motion.div
+                    key={recommendation.connectionRecordId}
+                    initial={{
+                      opacity: 0,
+                      y: 28,
+                    }}
+                    whileInView={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    viewport={{
+                      once: true,
+                    }}
+                    transition={{
+                      duration: 0.45,
+                      delay: index * 0.05,
+                    }}
+                    className="
+                group
+                relative
+                w-[84vw]
+                max-w-[390px]
+                shrink-0
+                snap-start
+
+                md:w-full
+                md:max-w-none
+                md:shrink
+                md:snap-align-none
+
+                hover:z-50
+              "
+                    style={{
+                      perspective: "2000px",
+                    }}
+                  >
+                    {/* ================================================= */}
+                    {/* INSIDE PAGE */}
+                    {/* This is RELATIVE, not absolute.
+                  It controls the natural card height.
+                  Therefore NO inside scrolling is needed. */}
+                    {/* ================================================= */}
+
+                    <div
+                      className="
+  relative
+  flex
+  h-auto
+  flex-col
+  overflow-hidden
+  rounded-[28px]
+  border
+  border-slate-200
+  bg-white
+  p-5
+  shadow-[0_22px_70px_rgba(7,26,74,0.16)]
+
+  sm:p-6
+  md:p-6
+"
+                      style={{
+                        background: `linear-gradient(
+    145deg,
+    #ffffff 0%,
+    ${profile.theme.secondary}08 100%
+  )`,
+                      }}
+                    >
+                      {/* INSIDE DECORATIVE GLOW */}
+                      <div
+                        className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full opacity-[0.10] blur-3xl"
+                        style={{
+                          backgroundColor: profile.theme.secondary,
+                        }}
+                      />
+
+                      {/* MOBILE CLOSE BUTTON */}
+                      {isBookOpen && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenPeopleBookId("")}
+                          className="absolute right-4 top-4 z-30 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-black text-[#071A4A] shadow-md md:hidden"
+                          aria-label="Close connection details"
+                        >
+                          ×
+                        </button>
+                      )}
+
+                      <div className="relative z-10">
+                        {/* INSIDE TOP */}
+
+                        <div className="flex items-start justify-between gap-3 pr-10 md:pr-0">
+                          <div>
+                            <p
+                              className="text-[10px] font-black uppercase tracking-[0.18em]"
+                              style={{
+                                color: profile.theme.secondary,
+                              }}
+                            >
+                              Why Bridge Picked
+                            </p>
+
+                            <p className="mt-1 text-sm font-black text-[#071A4A]">
+                              This Connection
+                            </p>
+                          </div>
+
+                          <motion.div
+                            animate={{
+                              boxShadow: [
+                                `0 0 0px ${profile.theme.secondary}00`,
+                                `0 0 20px ${profile.theme.secondary}55`,
+                                `0 0 0px ${profile.theme.secondary}00`,
+                              ],
+                            }}
+                            transition={{
+                              repeat: Infinity,
+                              duration: 2.5,
+                              ease: "easeInOut",
+                            }}
+                            className="shrink-0 rounded-xl px-3 py-2 text-center"
+                            style={{
+                              color: profile.theme.primary,
+                              backgroundColor: `${profile.theme.secondary}14`,
+                              border: `1px solid ${profile.theme.secondary}25`,
+                            }}
+                          >
+                            <p className="text-lg font-black leading-none">
+                              {recommendation.matchScore}%
+                            </p>
+
+                            <p className="mt-1 text-[8px] font-black uppercase tracking-[0.15em]">
+                              Match
+                            </p>
+                          </motion.div>
+                        </div>
+
+                        <div
+                          className="mt-4 h-1 w-14 rounded-full"
+                          style={{
+                            backgroundColor: profile.theme.secondary,
+                          }}
+                        />
+
+                        {/* MATCH EXPLANATION */}
+
+                        <p className="mt-5 text-sm font-medium leading-6 text-slate-600">
+                          {recommendation.matchEvidence}
+                        </p>
+
+                        {/* PUBLIC PROFILE */}
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPublicProfile(person)}
+                          className="group/profile mt-6 flex w-full cursor-pointer items-center gap-3 rounded-[20px] border border-slate-200 bg-white p-3 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                        >
+                          {person.profilePhoto ? (
+                            <img
+                              src={person.profilePhoto}
+                              alt={person.fullName || "Bridge member"}
+                              className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-md transition group-hover/profile:scale-105"
+                            />
+                          ) : (
+                            <div
+                              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black text-white shadow-md transition group-hover/profile:scale-105"
+                              style={{
+                                background: `linear-gradient(
+                            135deg,
+                            ${profile.theme.primary},
+                            ${profile.theme.secondary}
+                          )`,
+                              }}
+                            >
+                              {(person.firstName || person.fullName || "B")
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-black text-[#071A4A]">
+                              {person.fullName || "Bridge Member"}
+                            </p>
+
+                            <p
+                              className="mt-1 inline-flex items-center gap-1 text-[11px] font-black"
+                              style={{
+                                color: profile.theme.secondary,
+                              }}
+                            >
+                              View Public Profile
+                              <span className="transition group-hover/profile:translate-x-1">
+                                →
+                              </span>
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+
+                      {/* ACTIONS */}
+
+                      <div className="relative z-10 mt-auto pt-5">
+                        <div className="border-t border-slate-200 pt-1">
+                          <PeopleRecommendationActions
+                            person={person}
+                            viewerToken={token}
+                            theme={profile.theme}
+                            connectionRecordId={
+                              recommendation.connectionRecordId
+                            }
+                            onRecommendationHidden={() => {
+                              setPeopleRecommendations((current) =>
+                                current.filter(
+                                  (item) =>
+                                    item.connectionRecordId !==
+                                    recommendation.connectionRecordId,
+                                ),
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ================================================= */}
+                    {/* BOOK COVER */}
+                    {/* ================================================= */}
+
+                    <div
+                      onClick={() => {
+                        setOpenPeopleBookId((current) =>
+                          current === recommendation.connectionRecordId
+                            ? ""
+                            : recommendation.connectionRecordId,
+                        );
+                      }}
+                      className={`
+                  absolute
+                  inset-0
+                  z-20
+                  flex
+                  flex-col
+                  overflow-hidden
+                  rounded-[28px]
+                  border
+                  border-white/10
+                  p-6
+                  text-white
+                  shadow-[0_26px_75px_rgba(7,26,74,0.32)]
+                  transition-transform
+                  duration-700
+                  ease-[cubic-bezier(0.22,1,0.36,1)]
+
+                  ${
+                    isBookOpen
+                      ? "[transform:rotateY(-88deg)] md:[transform:rotateY(0deg)] md:group-hover:[transform:rotateY(-88deg)]"
+                      : "[transform:rotateY(0deg)] md:group-hover:[transform:rotateY(-88deg)]"
+                  }
+                `}
+                      style={{
+                        transformOrigin: "left center",
+                        transformStyle: "preserve-3d",
+                        backfaceVisibility: "hidden",
+
+                        background: `linear-gradient(
+                    145deg,
+                    #071A4A 0%,
+                    ${profile.theme.primary} 100%
+                  )`,
+                      }}
+                    >
+                      {/* GLOW 1 */}
+
+                      <motion.div
+                        animate={{
+                          opacity: [0.08, 0.2, 0.08],
+                          scale: [1, 1.15, 1],
+                        }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 4,
+                          ease: "easeInOut",
+                        }}
+                        className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full blur-3xl"
+                        style={{
+                          backgroundColor: profile.theme.secondary,
+                        }}
+                      />
+
+                      {/* GLOW 2 */}
+
+                      <div
+                        className="pointer-events-none absolute -bottom-24 -left-24 h-56 w-56 rounded-full opacity-[0.08] blur-3xl"
+                        style={{
+                          backgroundColor: profile.theme.secondary,
+                        }}
+                      />
+
+                      {/* TOP ACCENT */}
+
+                      <motion.div
+                        animate={{
+                          width: ["52px", "110px", "52px"],
+                          opacity: [0.6, 1, 0.6],
+                        }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 3,
+                          ease: "easeInOut",
+                        }}
+                        className="relative z-10 h-1.5 rounded-full"
+                        style={{
+                          backgroundColor: profile.theme.secondary,
+                          boxShadow: `0 0 18px ${profile.theme.secondary}`,
+                        }}
+                      />
+
+                      {/* MATCH */}
+
+                      <div className="relative z-10 mt-8">
+                        <p className="text-[10px] font-black uppercase tracking-[0.26em] text-white/45">
+                          Bridge Match
+                        </p>
+
+                        <motion.div
+                          animate={{
+                            textShadow: [
+                              `0 0 0px ${profile.theme.secondary}`,
+                              `0 0 30px ${profile.theme.secondary}`,
+                              `0 0 12px ${profile.theme.secondary}`,
+                              `0 0 0px ${profile.theme.secondary}`,
+                            ],
+
+                            scale: [1, 1.045, 1],
+                          }}
+                          transition={{
+                            repeat: Infinity,
+                            duration: 2.8,
+                            ease: "easeInOut",
+                          }}
+                          className="mt-3 origin-left text-6xl font-black leading-none tracking-[-0.07em]"
+                        >
+                          {recommendation.matchScore}%
+                        </motion.div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <motion.span
+                            animate={{
+                              opacity: [0.4, 1, 0.4],
+                              scale: [1, 1.35, 1],
+                            }}
+                            transition={{
+                              repeat: Infinity,
+                              duration: 2,
+                            }}
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{
+                              backgroundColor: profile.theme.secondary,
+                              boxShadow: `0 0 12px ${profile.theme.secondary}`,
+                            }}
+                          />
+
+                          <p
+                            className="text-[10px] font-black uppercase tracking-[0.19em]"
+                            style={{
+                              color: profile.theme.secondary,
+                            }}
+                          >
+                            Connection Match
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* PERSON */}
+
+                      <div className="relative z-10 mt-auto">
+                        <div className="flex items-center gap-4">
+                          {person.profilePhoto ? (
+                            <img
+                              src={person.profilePhoto}
+                              alt={person.fullName || "Bridge member"}
+                              className="h-16 w-16 shrink-0 rounded-[18px] object-cover shadow-[0_12px_30px_rgba(0,0,0,0.28)]"
+                            />
+                          ) : (
+                            <div
+                              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[18px] text-xl font-black text-white shadow-[0_12px_30px_rgba(0,0,0,0.28)]"
+                              style={{
+                                background: `linear-gradient(
+                            135deg,
+                            ${profile.theme.secondary},
+                            ${profile.theme.primary}
+                          )`,
+                              }}
+                            >
+                              {(person.firstName || person.fullName || "B")
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <h3 className="truncate text-xl font-black tracking-[-0.025em] text-white">
+                              {person.fullName || "Bridge Member"}
+                            </h3>
+
+                            {subtitle && (
+                              <p className="mt-1 line-clamp-2 text-sm font-medium leading-5 text-white/55">
+                                {subtitle}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* DESKTOP HOVER INSTRUCTION */}
+
+                        <div
+                          className="mt-7 hidden items-center gap-2 text-xs font-black uppercase tracking-[0.17em] md:flex"
+                          style={{
+                            color: profile.theme.secondary,
+                          }}
+                        >
+                          <span>Hover to see why</span>
+
+                          <motion.span
+                            animate={{
+                              x: [0, 6, 0],
+                            }}
+                            transition={{
+                              repeat: Infinity,
+                              duration: 1.4,
+                              ease: "easeInOut",
+                            }}
+                            className="text-lg"
+                          >
+                            →
+                          </motion.span>
+                        </div>
+
+                        {/* MOBILE OPEN BUTTON */}
+
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            setOpenPeopleBookId(
+                              recommendation.connectionRecordId,
+                            );
+                          }}
+                          className="mt-7 flex w-full cursor-pointer items-center justify-between rounded-2xl border border-white/15 bg-white/10 px-4 py-3.5 text-left text-xs font-black uppercase tracking-[0.15em] backdrop-blur-sm transition active:scale-[0.98] md:hidden"
+                          style={{
+                            color: profile.theme.secondary,
+                          }}
+                        >
+                          <span>Open to see why</span>
+
+                          <motion.span
+                            animate={{
+                              x: [0, 5, 0],
+                            }}
+                            transition={{
+                              repeat: Infinity,
+                              duration: 1.3,
+                            }}
+                            className="text-lg"
+                          >
+                            →
+                          </motion.span>
+                        </button>
+                      </div>
+
+                      {/* BOOK SPINE */}
+
+                      <div
+                        className="pointer-events-none absolute bottom-0 left-0 top-0 w-2 opacity-70"
+                        style={{
+                          background: `linear-gradient(
+                      180deg,
+                      ${profile.theme.secondary},
+                      ${profile.theme.primary},
+                      ${profile.theme.secondary}
+                    )`,
+                        }}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* MOBILE SWIPE DOTS / VISUAL INDICATOR */}
+
+          {peopleRecommendations.length > 1 &&
+            !peopleRecommendationsLoading && (
+              <div className="mt-1 flex justify-center gap-2 md:hidden">
+                {peopleRecommendations.map((recommendation) => (
+                  <span
+                    key={recommendation.connectionRecordId}
+                    className="h-1.5 w-6 rounded-full bg-slate-300"
+                  />
+                ))}
+              </div>
+            )}
+        </div>
+      </section>
       {/* recommendations */}
       <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-12">
         <div className="mx-auto w-full max-w-7xl px-4">
@@ -2029,6 +4099,14 @@ const allFutureCommunityItems = [
             </div>
           </div>
         </div>
+      )}
+
+      {selectedPublicProfile && (
+        <PublicProfileView
+          member={selectedPublicProfile}
+          theme={profile.theme}
+          onClose={() => setSelectedPublicProfile(null)}
+        />
       )}
     </main>
   );

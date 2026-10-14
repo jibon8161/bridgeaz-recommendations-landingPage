@@ -5,6 +5,7 @@ import LocalDirectory from "./components/LocalDirectory";
 import LoginPage from "./LoginPage";
 import MyBridgeHome from "./MyBridgeHome";
 import ProtectedRoute from "./ProtectedRoute";
+import AdminMembersPage from "./AdminMembersPage";
 export default function App() {
   return (
     <BrowserRouter>
@@ -38,6 +39,23 @@ export default function App() {
         />
 
         <Route path="/directory" element={<LocalDirectory />} />
+        <Route
+          path="/admin/members"
+          element={
+            <ProtectedRoute>
+              <AdminMembersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/members"
+          element={
+            <ProtectedRoute>
+              <AdminMembersPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

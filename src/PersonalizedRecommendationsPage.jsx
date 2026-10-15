@@ -510,11 +510,14 @@ const fakeNames = [
   "Jonathan",
 ];
 
+
+
 function PeopleRecommendationActions({
   person,
   viewerToken,
   theme,
   connectionRecordId,
+  isHelpSomeone,
   onRecommendationHidden,
 }) {
   const [isFollowing, setIsFollowing] = useState(false);
@@ -857,12 +860,30 @@ function PeopleRecommendationActions({
               : `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`,
           }}
         >
-          {recommendationInterestSubmitting
-            ? "Saving..."
-            : recommendationInterested
-              ? "✓ I'm Interested"
-              : "I'm Interested"}
+   {recommendationInterestSubmitting
+  ? "Saving..."
+  : recommendationInterested
+    ? isHelpSomeone
+      ? "✓ I'm Open to Helping"
+      : "✓ I'm Interested"
+    : isHelpSomeone
+      ? "I'm Open to Helping"
+      : "I'm Interested"}
         </button>
+
+        {recommendationInterested && (
+  <div className="col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center">
+    <p className="text-xs font-black text-emerald-700">
+      {isHelpSomeone
+        ? "✓ You’re open to helping"
+        : "✓ You’re interested"}
+    </p>
+
+    <p className="mt-1 text-[11px] font-medium text-emerald-600">
+      Bridge will check whether they’re open to the connection too.
+    </p>
+  </div>
+)}
         <button
           type="button"
           onClick={handleHideRecommendation}
@@ -871,6 +892,7 @@ function PeopleRecommendationActions({
         >
           Not for Me / Hide
         </button>
+        
         <button
           type="button"
           disabled={followSubmitting || !viewerToken || !memberRecordId}
@@ -1288,6 +1310,13 @@ export default function PersonalizedRecommendationsPage() {
   const [mutualPeopleConnectionsLoading, setMutualPeopleConnectionsLoading] =
     useState(true);
 
+  const [connectionOutcomesDue, setConnectionOutcomesDue] = useState([]);
+  const [connectionOutcomesDueLoading, setConnectionOutcomesDueLoading] =
+    useState(false);
+  
+  const [connectionOutcomeSubmittingId, setConnectionOutcomeSubmittingId] =
+    useState("");
+
   const [
     peopleConnectionInvitationSubmittingId,
     setPeopleConnectionInvitationSubmittingId,
@@ -1504,12 +1533,100 @@ export default function PersonalizedRecommendationsPage() {
       }
     }
 
+    async function fetchConnectionOutcomesDue() {
+  try {
+    setConnectionOutcomesDueLoading(true);
+
+    const response = await fetch(
+      `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+        token,
+      )}/connection-outcomes-due`,
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+    );
+
+    const result = await response.json();
+
+    if (!active) return;
+
+    if (!response.ok || result?.success !== true) {
+      throw new Error(
+        result?.error ||
+          result?.message ||
+          "Could not load connection follow-ups.",
+      );
+    }
+
+    const connections = Array.isArray(result?.connections)
+      ? result.connections
+      : [];
+
+    setConnectionOutcomesDue(connections);
+
+    console.log("CONNECTION OUTCOMES DUE:", connections);
+  } catch (error) {
+    console.error("CONNECTION OUTCOMES DUE ERROR:", error);
+
+    if (active) {
+      setConnectionOutcomesDue([]);
+    }
+  } finally {
+    if (active) {
+      setConnectionOutcomesDueLoading(false);
+    }
+  }
+    }
+    
+
+
     fetchMutualPeopleConnections();
+    fetchConnectionOutcomesDue();
 
     return () => {
       active = false;
     };
   }, [token, accessAllowed]);
+
+  async function handleConnectionOutcome(connectionRecordId, outcome) {
+    try {
+      setConnectionOutcomeSubmittingId(connectionRecordId);
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/profile/connection-outcome",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            viewerToken: token,
+            connectionRecordId,
+            outcome,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(result?.error || "Could not save connection feedback.");
+      }
+
+      setConnectionOutcomesDue((current) =>
+        current.filter(
+          (connection) => connection.connectionRecordId !== connectionRecordId,
+        ),
+      );
+
+      console.log("CONNECTION OUTCOME SAVED:", result);
+    } catch (error) {
+      console.error("CONNECTION OUTCOME SUBMIT ERROR:", error);
+    } finally {
+      setConnectionOutcomeSubmittingId("");
+    }
+  }
 
   async function handlePeopleInvitationInterest(connectionRecordId) {
     if (!token) {
@@ -1562,6 +1679,8 @@ export default function PersonalizedRecommendationsPage() {
       setPeopleConnectionInvitationSubmittingId("");
     }
   }
+
+
 
   async function handlePeopleInvitationDecline(connectionRecordId) {
     if (!token) {
@@ -2613,6 +2732,136 @@ export default function PersonalizedRecommendationsPage() {
         </section>
       )}
 
+      {connectionOutcomesDue.length > 0 && (
+        <section className="relative z-10 px-4 pb-8 md:px-6 md:pb-10">
+          <div className="mx-auto w-full max-w-7xl px-4">
+            <div className="mb-6">
+              <p
+                className="text-sm font-black uppercase tracking-[0.28em]"
+                style={{
+                  color: profile.theme.secondary,
+                }}
+              >
+                Bridge Follow-Up
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black text-[#071A4A]">
+                How Did This Connection Go?
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-slate-600">
+                Your feedback helps Bridge make better connections for you and
+                the community.
+              </p>
+            </div>
+
+            {connectionOutcomesDueLoading ? (
+              <div className="rounded-3xl bg-white/80 p-8 text-center shadow-lg">
+                <p className="font-bold text-slate-500">
+                  Loading connection follow-up...
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {connectionOutcomesDue.map((connection) => (
+                  <motion.div
+                    key={connection.connectionRecordId}
+                    initial={{
+                      opacity: 0,
+                      y: 20,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    className="relative overflow-hidden rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_20px_55px_rgba(7,26,74,0.12)]"
+                  >
+                    <div
+                      className="mb-4 inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em]"
+                      style={{
+                        backgroundColor: `${profile.theme.secondary}15`,
+                        color: profile.theme.secondary,
+                      }}
+                    >
+                      Connection Check-In
+                    </div>
+
+                    <h3 className="text-xl font-black text-[#071A4A]">
+                      Did this introduction help?
+                    </h3>
+
+                    {connection.matchEvidence && (
+                      <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+                          Why Bridge connected you
+                        </p>
+
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {connection.matchEvidence}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="mt-5 grid gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleConnectionOutcome(
+                            connection.connectionRecordId,
+                            "Helpful",
+                          )
+                        }
+                        disabled={
+                          connectionOutcomeSubmittingId ===
+                          connection.connectionRecordId
+                        }
+                        className="cursor-pointer rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-black text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Helpful
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleConnectionOutcome(
+                            connection.connectionRecordId,
+                            "We're connecting",
+                          )
+                        }
+                        disabled={
+                          connectionOutcomeSubmittingId ===
+                          connection.connectionRecordId
+                        }
+                        className="cursor-pointer rounded-2xl border-2 border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm font-black text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        We&apos;re connecting
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleConnectionOutcome(
+                            connection.connectionRecordId,
+                            "Nothing came of it",
+                          )
+                        }
+                        disabled={
+                          connectionOutcomeSubmittingId ===
+                          connection.connectionRecordId
+                        }
+                        className="cursor-pointer rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-black text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Nothing came of it
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Bridge Connection Invitations */}
       {(peopleConnectionInvitationsLoading ||
         peopleConnectionInvitations.length > 0) && (
@@ -2647,6 +2896,9 @@ export default function PersonalizedRecommendationsPage() {
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {peopleConnectionInvitations.map((invitation) => {
                   const person = invitation?.person || {};
+
+                  const isHelpSomeone =
+                    invitation?.recommendationType === "Help Someone";
 
                   const role = Array.isArray(person.role)
                     ? person.role.join(", ")
@@ -2729,7 +2981,9 @@ export default function PersonalizedRecommendationsPage() {
                       {invitation.matchEvidence && (
                         <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                           <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
-                            Why Bridge thinks you should connect
+                            {isHelpSomeone
+                              ? "Why Bridge thinks this person may be able to help"
+                              : "Why Bridge thinks you should connect"}
                           </p>
 
                           <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -2755,7 +3009,9 @@ export default function PersonalizedRecommendationsPage() {
                               background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
                             }}
                           >
-                            I'm Interested
+                            {isHelpSomeone
+                              ? "Yes, I'd Like to Connect"
+                              : "I'm Interested"}
                           </button>
 
                           <button
@@ -2945,6 +3201,8 @@ export default function PersonalizedRecommendationsPage() {
             >
               {peopleRecommendations.map((recommendation, index) => {
                 const person = recommendation?.person || {};
+                const isHelpSomeone =
+                  recommendation?.recommendationType === "Help Someone";
 
                 const role = Array.isArray(person.role)
                   ? person.role.join(", ")
@@ -3057,7 +3315,9 @@ export default function PersonalizedRecommendationsPage() {
                                 color: profile.theme.secondary,
                               }}
                             >
-                              Why Bridge Picked
+                              {isHelpSomeone
+                                ? "Why Bridge Thinks"
+                                : "Why Bridge Picked"}
                             </p>
 
                             <p className="mt-1 text-sm font-black text-[#071A4A]">
@@ -3169,6 +3429,7 @@ export default function PersonalizedRecommendationsPage() {
                             connectionRecordId={
                               recommendation.connectionRecordId
                             }
+                            isHelpSomeone={isHelpSomeone}
                             onRecommendationHidden={() => {
                               setPeopleRecommendations((current) =>
                                 current.filter(
@@ -3327,7 +3588,9 @@ export default function PersonalizedRecommendationsPage() {
                               color: profile.theme.secondary,
                             }}
                           >
-                            Connection Match
+                            {isHelpSomeone
+                              ? "Help Someone"
+                              : "Connection Match"}
                           </p>
                         </div>
                       </div>

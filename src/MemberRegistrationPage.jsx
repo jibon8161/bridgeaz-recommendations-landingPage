@@ -97,7 +97,7 @@ export default function MemberRegistrationPage() {
   const [registrationComplete, setRegistrationComplete] = useState(null);
   const [selectedChoices, setSelectedChoices] = useState([]);
   const [freeText, setFreeText] = useState("");
-
+const [showWhyModal, setShowWhyModal] = useState(false);
   // True only when this page created the Airtable member in this session.
   // This lets Step 2 safely show a Back button without creating the member twice.
   const [memberCreatedThisSession, setMemberCreatedThisSession] = useState(false);
@@ -241,10 +241,12 @@ export default function MemberRegistrationPage() {
         setMemberCreatedThisSession(false);
         setShowStepOneReview(false);
         setRegistrationComplete(null);
-        setRegistrationQuestion(normalized);
-        setSelectedChoices([]);
-        setFreeText("");
-        setErrorMessage("");
+     setRegistrationQuestion(normalized);
+     setShowWhyModal(true);
+
+     setSelectedChoices([]);
+     setFreeText("");
+     setErrorMessage("");
       } catch (error) {
         if (cancelled) {
           return;
@@ -262,6 +264,8 @@ export default function MemberRegistrationPage() {
       cancelled = true;
     };
   }, [user]);
+
+
 
   /* =====================================================
      FORM INPUT CHANGE
@@ -407,11 +411,12 @@ export default function MemberRegistrationPage() {
 
       const normalized = normalizeRegistrationQuestion(startData);
 
-      setRegistrationQuestion(normalized);
+ setRegistrationQuestion(normalized);
+ setShowWhyModal(true);
 
-      setSelectedChoices([]);
-      setFreeText("");
-      setErrorMessage("");
+ setSelectedChoices([]);
+ setFreeText("");
+ setErrorMessage("");
     } catch (error) {
       console.error("BASIC REGISTRATION ERROR:", error);
 
@@ -1205,7 +1210,8 @@ export default function MemberRegistrationPage() {
                   </motion.button>
 
                   <p className="mt-5 text-[11px] font-semibold text-slate-400">
-                    Your membership is active. You will not need to register again.
+                    Your membership is active. You will not need to register
+                    again.
                   </p>
                 </motion.div>
               ) : !registrationQuestion || showStepOneReview ? (
@@ -1214,7 +1220,11 @@ export default function MemberRegistrationPage() {
                 ================================================= */
 
                 <motion.div
-                  key={showStepOneReview ? "registration-step-1-review" : "registration-step-1"}
+                  key={
+                    showStepOneReview
+                      ? "registration-step-1-review"
+                      : "registration-step-1"
+                  }
                   initial={{ opacity: 0, x: -45 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -70 }}
@@ -1414,6 +1424,28 @@ export default function MemberRegistrationPage() {
                         {registrationQuestion.description}
                       </p>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowWhyModal(true)}
+                      className="
+    mt-3
+    inline-flex
+    cursor-pointer
+    items-center
+    gap-2
+    text-[12px]
+    font-bold
+    text-[#0A4BA8]
+    transition
+    hover:text-[#071A4A]
+  "
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-50 text-[11px] font-black">
+                        ?
+                      </span>
+                      Why are we asking?
+                    </button>
                   </div>
 
                   {Array.isArray(registrationQuestion.choices) &&
@@ -1557,6 +1589,162 @@ export default function MemberRegistrationPage() {
           </div>
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {showWhyModal && (
+          <motion.div
+            key="why-registration-question"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="
+        fixed
+        inset-0
+        z-[200]
+        flex
+        items-center
+        justify-center
+        bg-[#071A4A]/45
+        px-5
+        backdrop-blur-sm
+      "
+            onClick={() => setShowWhyModal(false)}
+          >
+            <motion.div
+              initial={{
+                opacity: 0,
+                y: 24,
+                scale: 0.96,
+              }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                scale: 1,
+              }}
+              exit={{
+                opacity: 0,
+                y: 18,
+                scale: 0.97,
+              }}
+              transition={{
+                duration: 0.25,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              onClick={(event) => event.stopPropagation()}
+              className="
+          relative
+          w-full
+          max-w-[460px]
+          overflow-hidden
+          rounded-[26px]
+          border
+          border-white/80
+          bg-white
+          p-7
+          shadow-[0_30px_90px_rgba(7,26,74,0.30)]
+          sm:p-8
+        "
+            >
+              {/* Close */}
+              <button
+                type="button"
+                onClick={() => setShowWhyModal(false)}
+                className="
+            absolute
+            right-4
+            top-4
+            flex
+            h-9
+            w-9
+            cursor-pointer
+            items-center
+            justify-center
+            rounded-full
+            bg-slate-100
+            text-xl
+            font-bold
+            text-slate-500
+            transition
+            hover:bg-slate-200
+            hover:text-[#071A4A]
+          "
+                aria-label="Close"
+              >
+                ×
+              </button>
+
+              {/* Icon */}
+              <div
+                className="
+            flex
+            h-12
+            w-12
+            items-center
+            justify-center
+            rounded-[15px]
+            bg-blue-50
+            text-xl
+            font-black
+            text-[#0A4BA8]
+          "
+              >
+                ?
+              </div>
+
+              <span className="mt-5 block text-[11px] font-black uppercase tracking-[0.2em] text-[#0A67C8]">
+                Why Bridge asks
+              </span>
+
+              <h3
+                className="mt-2 pr-8 text-[27px] font-semibold leading-tight tracking-[-0.03em] text-[#071A4A]"
+                style={{
+                  fontFamily: '"Playfair Display", Georgia, serif',
+                }}
+              >
+                Your answer helps us personalize your Bridge.
+              </h3>
+
+              <p className="mt-4 text-[14px] font-medium leading-7 text-slate-600">
+                Bridge uses your answer to better understand what matters to you
+                and make the activities, resources, opportunities, and
+                connections you see more relevant.
+              </p>
+
+              <div className="mt-5 rounded-[16px] border border-blue-100 bg-blue-50/60 px-4 py-3">
+                <p className="text-[13px] font-semibold leading-6 text-[#0A4BA8]">
+                  The goal is simple: help Bridge start showing you more useful
+                  things from the beginning.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowWhyModal(false)}
+                className="
+            mt-6
+            w-full
+            cursor-pointer
+            rounded-[16px]
+            bg-gradient-to-r
+            from-[#071A4A]
+            to-[#0A5FC0]
+            px-5
+            py-3.5
+            text-[14px]
+            font-black
+            text-white
+            shadow-[0_12px_30px_rgba(10,75,168,0.20)]
+            transition
+            hover:-translate-y-0.5
+            hover:shadow-lg
+          "
+              >
+                Got it
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

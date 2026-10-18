@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { motion } from "framer-motion";
 
@@ -77,58 +77,117 @@ export default function MyBridgeHome() {
     -------------------------------------------------------
   */
 
+const refreshBridgeMember = useCallback(async () => {
+  if (!user) {
+    return null;
+  }
+
+  try {
+    const idToken = await user.getIdToken();
+
+    const response = await fetch(
+      "https://bridgeaz-recommendations-server.vercel.app/api/auth/me",
+      {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      },
+    );
+
+    const data = await response.json();
+
+    console.log("BACKEND AUTH TEST:", data);
+
+    if (response.ok && data.success && data.memberFound && data.member) {
+      return data.member;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Backend auth test failed:", error);
+
+    return null;
+  }
+}, [user]);
+
+useEffect(() => {
+  if (!user) {
+    return;
+  }
+
+  let cancelled = false;
+
+  refreshBridgeMember().then((member) => {
+    if (!cancelled) {
+      setBridgeMember(member);
+    }
+  });
+
+  return () => {
+    cancelled = true;
+  };
+}, [user, refreshBridgeMember]);
+
+  /*
+    -------------------------------------------------------
+    MEMBERSHIP / MY BRIDGE ACCESS
+
+    A Members record means the user is a member.
+    Registration is complete only when the member is
+    Active + Completed.
+
+    My Bridge stays locked until Make has created
+    the member's My Bridge Token.
+    -------------------------------------------------------
+  */
+
+  const isMember = Boolean(bridgeMember);
+
+  const membershipComplete =
+    bridgeMember?.status === "Active" &&
+    bridgeMember?.conversationStatus === "Completed";
+
+  const canAccessMyBridge =
+    membershipComplete && Boolean(bridgeMember?.myBridgeToken);
+  
   useEffect(() => {
     if (!user) {
       return;
     }
 
-    const verifyLoginWithBackend = async () => {
-      try {
-        const idToken = await user.getIdToken();
+    if (!membershipComplete) {
+      return;
+    }
 
-        const response = await fetch(
-          "https://bridgeaz-recommendations-server.vercel.app/api/auth/me",
-          {
-            headers: {
-              Authorization: `Bearer ${idToken}`,
-            },
-          },
-        );
+    if (bridgeMember?.myBridgeToken) {
+      return;
+    }
 
-        const data = await response.json();
+    let cancelled = false;
 
-        console.log("BACKEND AUTH TEST:", data);
+    const checkForToken = async () => {
+      const member = await refreshBridgeMember();
 
-        if (data.success && data.memberFound && data.member) {
-          setBridgeMember(data.member);
-        } else {
-          setBridgeMember(null);
-        }
-      } catch (error) {
-        console.error("Backend auth test failed:", error);
-
-        setBridgeMember(null);
+      if (!cancelled && member) {
+        setBridgeMember(member);
       }
     };
 
-    verifyLoginWithBackend();
-  }, [user]);
+    const intervalId = window.setInterval(() => {
+      checkForToken();
+    }, 3000);
 
-  /*
-    TEMPORARY.
-
-    We will connect actual membership/onboarding
-    completion separately.
-
-    Do not use memberFound alone as membership
-    completion yet.
-  */
-
-const isMember = Boolean(bridgeMember);
-
-const canAccessMyBridge =
-  bridgeMember?.status === "Active" &&
-  bridgeMember?.conversationStatus === "Completed";
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    user,
+    membershipComplete,
+    bridgeMember?.myBridgeToken,
+    refreshBridgeMember,
+  ]);
+  
 
   /*
     -------------------------------------------------------
@@ -363,24 +422,61 @@ const canAccessMyBridge =
 
             <FeatureCard
               number="01"
-              numberColor="text-[#0A4BA8]"
-              background="from-[#F5FAFF] via-white to-[#EDF6FF]"
+              numberColor={
+                membershipComplete ? "text-emerald-600" : "text-[#0A4BA8]"
+              }
+              background={
+                membershipComplete
+                  ? "from-[#F2FCF7] via-white to-[#ECFDF5]"
+                  : "from-[#F5FAFF] via-white to-[#EDF6FF]"
+              }
               illustration={<MemberIllustration />}
-              title="Become a Member"
-              description="Tell Bridge who you are and what matters to you. Complete your membership to unlock My Bridge."
-              bullets={[
-                "Complete your Bridge setup",
-                "Tell us your interests",
-                "Help Bridge personalize your experience",
-                "Unlock your full My Bridge",
-              ]}
-              buttonText={isMember ? "Membership Complete" : "Become a Member"}
+              title={
+                membershipComplete
+                  ? "You're a Bridge Member"
+                  : "Become a Member"
+              }
+              description={
+                membershipComplete
+                  ? "Your Bridge membership is active and your registration is complete."
+                  : isMember
+                    ? "Your Bridge membership has started. Finish registration to complete your setup."
+                    : "Tell Bridge who you are and what matters to you. Complete your membership to unlock My Bridge."
+              }
+              bullets={
+                membershipComplete
+                  ? [
+                      "Bridge membership active",
+                      "Registration complete",
+                      "Your interests are saved",
+                      "Personalization is enabled",
+                    ]
+                  : [
+                      "Complete your Bridge setup",
+                      "Tell us your interests",
+                      "Help Bridge personalize your experience",
+                      "Unlock your full My Bridge",
+                    ]
+              }
+              buttonText={
+                membershipComplete
+                  ? "Membership Complete"
+                  : isMember
+                    ? "Continue Registration"
+                    : "Become a Member"
+              }
               buttonClass={
-                isMember
+                membershipComplete
                   ? "bg-emerald-600 text-white"
                   : "bg-gradient-to-r from-[#061B55] to-[#073A91] text-white"
               }
-              completed={isMember}
+              completed={membershipComplete}
+              disabled={membershipComplete}
+              onClick={() => {
+                if (!membershipComplete) {
+                  window.location.href = "/member-registration";
+                }
+              }}
             />
 
             {/* =====================================================
@@ -444,7 +540,9 @@ const canAccessMyBridge =
               description={
                 canAccessMyBridge
                   ? "Open your personalized Bridge experience."
-                  : "Your full personalized Bridge experience unlocks after you become a member."
+                  : membershipComplete
+                    ? "Your membership is complete. Bridge is preparing your personalized My Bridge experience."
+                    : "Your full personalized Bridge experience unlocks after you become a member."
               }
               bullets={[
                 "Selected For You",
@@ -454,10 +552,13 @@ const canAccessMyBridge =
                 "Profile & Connections",
               ]}
               locked={!canAccessMyBridge}
+              lockedLabel={membershipComplete ? "Preparing" : "Members Only"}
               buttonText={
                 canAccessMyBridge
                   ? "Open My Bridge"
-                  : "Become a Member to Unlock"
+                  : membershipComplete
+                    ? "Preparing My Bridge..."
+                    : "Become a Member to Unlock"
               }
               buttonClass="bg-gradient-to-r from-[#071A4A] to-[#2563EB] text-white"
               onClick={() => {
@@ -569,6 +670,8 @@ function FeatureCard({
   buttonClass = "",
   locked = false,
   completed = false,
+  disabled = false,
+  lockedLabel = "Members Only",
   customContent = null,
   onClick,
 }) {
@@ -599,7 +702,7 @@ function FeatureCard({
         {locked && (
           <div className="flex items-center gap-1.5 rounded-full border border-[#F2DCA7] bg-[#FFF3C9] px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#604E27]">
             <LockKeyhole size={11} />
-            Members Only
+            {lockedLabel}
           </div>
         )}
 
@@ -652,20 +755,23 @@ function FeatureCard({
       <button
         type="button"
         onClick={onClick}
-        disabled={locked}
+        disabled={locked || disabled}
         className={`mt-auto flex w-full items-center justify-between rounded-2xl px-5 py-4 text-sm font-black shadow-sm transition ${
-          locked
-            ? "cursor-not-allowed bg-slate-200/80 text-slate-500"
+          locked || disabled
+            ? completed
+              ? "cursor-not-allowed bg-emerald-600 text-white opacity-90"
+              : "cursor-not-allowed bg-slate-200/80 text-slate-500"
             : `${buttonClass} cursor-pointer hover:-translate-y-0.5 hover:shadow-xl`
         }`}
       >
         <span className="flex items-center gap-2">
           {locked && <LockKeyhole size={15} />}
+          {completed && disabled && <Check size={15} strokeWidth={3} />}
 
           {buttonText}
         </span>
 
-        {!locked && <ArrowRight size={18} />}
+        {!locked && !disabled && <ArrowRight size={18} />}
       </button>
     </motion.article>
   );

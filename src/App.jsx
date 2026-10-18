@@ -6,6 +6,7 @@ import LoginPage from "./LoginPage";
 import MyBridgeHome from "./MyBridgeHome";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminMembersPage from "./AdminMembersPage";
+import MemberRegistrationPage from "./MemberRegistrationPage";
 export default function App() {
   return (
     <BrowserRouter>
@@ -44,6 +45,15 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AdminMembersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/member-registration"
+          element={
+            <ProtectedRoute>
+              <MemberRegistrationPage />
             </ProtectedRoute>
           }
         />

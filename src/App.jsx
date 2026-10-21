@@ -7,6 +7,7 @@ import MyBridgeHome from "./MyBridgeHome";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminMembersPage from "./AdminMembersPage";
 import MemberRegistrationPage from "./MemberRegistrationPage";
+import ShareWithBridgePage from "./ShareWithBridgePage";
 export default function App() {
   return (
     <BrowserRouter>
@@ -54,6 +55,15 @@ export default function App() {
           element={
             <ProtectedRoute>
               <MemberRegistrationPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/share-with-bridge"
+          element={
+            <ProtectedRoute>
+              <ShareWithBridgePage />
             </ProtectedRoute>
           }
         />

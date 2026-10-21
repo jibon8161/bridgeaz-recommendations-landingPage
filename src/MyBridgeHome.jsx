@@ -513,6 +513,9 @@ useEffect(() => {
               }
               buttonText="Share Something"
               buttonClass="bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] text-white"
+              onClick={() => {
+                window.location.href = "/share-with-bridge";
+              }}
             />
 
             {/* =====================================================

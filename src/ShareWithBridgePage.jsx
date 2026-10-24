@@ -18,10 +18,11 @@ export default function ShareWithBridgePage() {
 
   const [sessionId, setSessionId] = useState("");
   const [submissionId, setSubmissionId] = useState("");
-
+const [submissionMode, setSubmissionMode] = useState("single");
   const [description, setDescription] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
-
+  const [sourceFile, setSourceFile] = useState(null);
+const [uploadedSource, setUploadedSource] = useState(null);
   const [question, setQuestion] = useState("");
   const [followUpAnswer, setFollowUpAnswer] = useState("");
 
@@ -267,6 +268,27 @@ export default function ShareWithBridgePage() {
      FIRST PROCESS
   ===================================================== */
 
+
+const fileToBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+
+      resolve(base64);
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Could not read the selected file."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+
+
   const handleProcessSubmission = async () => {
     try {
       setError("");
@@ -274,10 +296,12 @@ export default function ShareWithBridgePage() {
       const cleanDescription = description.trim();
       const cleanSourceUrl = sourceUrl.trim();
 
-      if (!cleanDescription && !cleanSourceUrl) {
-        setError("Please describe what you want to share or add a link.");
-        return;
-      }
+    if (!cleanDescription && !cleanSourceUrl && !sourceFile) {
+      setError(
+        "Please describe what you want to share, add a link, or upload a document.",
+      );
+      return;
+    }
 
       if (!sessionId) {
         setError("Your Share With Bridge session is missing.");
@@ -295,6 +319,54 @@ export default function ShareWithBridgePage() {
 
       const idToken = await currentUser.getIdToken();
 
+      const processSources = [];
+
+      if (cleanSourceUrl) {
+        processSources.push({
+          url: cleanSourceUrl,
+          kind: "website",
+        });
+      }
+
+      if (sourceFile) {
+        const base64Data = await fileToBase64(sourceFile);
+
+        const uploadResponse = await fetch(
+          "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/upload",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              sessionId,
+              fileName: sourceFile.name,
+              mimeType: sourceFile.type || "application/octet-stream",
+              base64Data,
+            }),
+          },
+        );
+
+        const uploadData = await uploadResponse.json();
+
+        console.log(
+          "SHARE WITH BRIDGE UPLOAD:",
+          uploadResponse.status,
+          uploadData,
+        );
+
+        if (!uploadResponse.ok || !uploadData?.success || !uploadData?.source) {
+          setError(
+            uploadData?.error || "Could not upload the selected document.",
+          );
+          return;
+        }
+
+        processSources.push(uploadData.source);
+        setUploadedSource(uploadData.source);
+      }
+
       const response = await fetch(
         "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/process",
         {
@@ -308,16 +380,11 @@ export default function ShareWithBridgePage() {
           body: JSON.stringify({
             sessionId,
 
+            submissionMode,
+
             description: cleanDescription,
 
-            sources: cleanSourceUrl
-              ? [
-                  {
-                    url: cleanSourceUrl,
-                    kind: "website",
-                  },
-                ]
-              : [],
+            sources: processSources,
           }),
         },
       );
@@ -415,7 +482,7 @@ export default function ShareWithBridgePage() {
 
           body: JSON.stringify({
             sessionId,
-
+            submissionMode,
             description: description.trim(),
 
             sourceUrl: sourceUrl.trim(),
@@ -539,6 +606,10 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
 
     setDescription(String(fields["Source Text"] || fields.description || ""));
 
+setSubmissionMode(
+  fields["Submission Mode"] === "Multiple Items" ? "multiple" : "single",
+);
+
     setSourceUrl(String(fields["Source Links"] || fields.source || ""));
 
     setSubmissionId("");
@@ -647,7 +718,7 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
 
           body: JSON.stringify({
             sessionId,
-
+            submissionMode,
             /*
               IMPORTANT:
               Reuse the SAME submission.
@@ -656,14 +727,18 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
 
             description: description.trim(),
 
-            sources: sourceUrl.trim()
-              ? [
-                  {
-                    url: sourceUrl.trim(),
-                    kind: "website",
-                  },
-                ]
-              : [],
+            sources: [
+              ...(sourceUrl.trim()
+                ? [
+                    {
+                      url: sourceUrl.trim(),
+                      kind: "website",
+                    },
+                  ]
+                : []),
+
+              ...(uploadedSource ? [uploadedSource] : []),
+            ],
 
             followUpAnswer: cleanAnswer,
           }),
@@ -763,14 +838,28 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
         return;
       }
 
-      const records = Array.isArray(data?.records) ? data.records : [];
-      const forms = {};
+    const records = Array.isArray(data?.records) ? data.records : [];
 
-      records.forEach((record, index) => {
-        forms[getReviewRecordKey(record, index)] = createReviewForm(record);
-      });
+    const sortedRecords = [...records].sort((a, b) => {
+      const aId = String(a?.fields?.["Submission ID"] || "");
+      const bId = String(b?.fields?.["Submission ID"] || "");
 
-      setReviewRecords(records);
+      const getBatchNumber = (id) => {
+        const match = id.match(/__batch_(\d+)$/);
+
+        return match ? Number(match[1]) : 1;
+      };
+
+      return getBatchNumber(aId) - getBatchNumber(bId);
+    });
+
+    const forms = {};
+
+     sortedRecords.forEach((record, index) => {
+       forms[getReviewRecordKey(record, index)] = createReviewForm(record);
+     });
+
+    setReviewRecords(sortedRecords);
       setReviewForms(forms);
       setReviewSavedId("");
       setScreen("review");
@@ -996,12 +1085,38 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
      RESET
   ===================================================== */
 
+
+const handleAddAnotherSubmission = () => {
+  // Keep the same sessionId.
+  // Keep submissionMode = "multiple".
+
+  setSubmissionId("");
+
+  setDescription("");
+  setSourceUrl("");
+  setSourceFile(null);
+setUploadedSource(null);
+  setQuestion("");
+  setFollowUpAnswer("");
+
+  setReviewRecords([]);
+  setReviewForms({});
+  setSavingReviewId("");
+  setReviewSavedId("");
+  setApprovingReviewId("");
+  setReviewApprovedId("");
+
+  setError("");
+
+  setScreen("new");
+};
+
   const handleBackToMenu = () => {
     setScreen("menu");
 
     setSessionId("");
     setSubmissionId("");
-
+setSubmissionMode("single");
     setDescription("");
     setSourceUrl("");
 
@@ -1046,6 +1161,26 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
       }
 
       return false;
+    });
+    filteredSessions.sort((a, b) => {
+      const aFields = a?.fields || a || {};
+      const bFields = b?.fields || b || {};
+
+      const aDate = new Date(
+        aFields["Last Modified"] ||
+          aFields["Last Activity At"] ||
+          aFields["Created At"] ||
+          0,
+      ).getTime();
+
+      const bDate = new Date(
+        bFields["Last Modified"] ||
+          bFields["Last Activity At"] ||
+          bFields["Created At"] ||
+          0,
+      ).getTime();
+
+      return bDate - aDate;
     });
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
@@ -1115,12 +1250,23 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
 
              const rawStatus = fields.Status || fields.status || "Unknown";
 
-             const status = sessionTab === "previous" ? "Complete" : rawStatus;
+           const status = sessionTab === "previous" ? "Complete" : rawStatus;
 
-                const description =
-                  fields["Source Text"] ||
-                  fields.description ||
-                  "Untitled submission";
+           const submissionMode = String(
+             fields["Submission Mode"] || "",
+           ).trim();
+
+           const submissionCount = Number(fields["Submission Count"] || 0);
+
+           const isMultipleSession = submissionMode === "Multiple Items";
+
+           const description = isMultipleSession
+             ? `Multiple Submissions — ${submissionCount} ${
+                 submissionCount === 1 ? "item" : "items"
+               }`
+             : fields["Source Text"] ||
+               fields.description ||
+               "Untitled submission";
 
                 return (
                   <div
@@ -1243,6 +1389,67 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
   ===================================================== */
 
   if (screen === "review") {
+    const allReviewItemsApproved =
+      reviewRecords.length > 0 &&
+      reviewRecords.every((record, index) => {
+        const fields = record?.fields || {};
+        const recordKey = getReviewRecordKey(record, index);
+
+        return (
+          reviewApprovedId === recordKey ||
+          fields["Status"] === "Signed Off" ||
+          fields["Contributor Signed Off"] === true
+        );
+      });if (
+        submissionMode === "multiple" &&
+        reviewRecords.length > 1 &&
+        allReviewItemsApproved
+      ) {
+        return (
+          <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+            <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+              <div className="mt-8 overflow-hidden rounded-[32px] border border-emerald-100 bg-white shadow-sm">
+                <div className="px-6 py-14 text-center sm:px-10 sm:py-16">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <Sparkles size={28} />
+                  </div>
+
+                  <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
+                    Complete
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                    Thank you! All submissions are complete.
+                  </h2>
+
+                  <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
+                    Bridge has saved all {reviewRecords.length} submissions in
+                    this batch.
+                  </p>
+
+                  <div className="mt-7 flex flex-wrap justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleAddAnotherSubmission}
+                      className="cursor-pointer rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-6 py-3.5 text-sm font-black text-white"
+                    >
+                      Add Another
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBackToMenu}
+                      className="cursor-pointer rounded-2xl border border-purple-200 bg-white px-6 py-3.5 text-sm font-black text-[#7C3AED]"
+                    >
+                      I'm Finished
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
         <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
@@ -1327,41 +1534,55 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
                     const isSaving = savingReviewId === recordKey;
                     const isSaved = reviewSavedId === recordKey;
                     const isApproving = approvingReviewId === recordKey;
-                    const isApproved = reviewApprovedId === recordKey;
+                  const isApproved =
+                    reviewApprovedId === recordKey ||
+                    fields["Status"] === "Signed Off" ||
+                    fields["Contributor Signed Off"] === true;
 
-                    if (isApproved) {
-                      return (
-                        <article
-                          key={recordKey}
-                          className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm"
+              if (isApproved) {
+                return (
+                  <article
+                    key={recordKey}
+                    className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm"
+                  >
+                    <div className="flex items-center gap-4 px-6 py-6 sm:px-8">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                        <Sparkles size={22} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">
+                          Approved
+                        </p>
+
+                        <h3 className="mt-1 text-lg font-bold text-slate-900">
+                          {form.title || `Item ${index + 1}`}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          This submission has been signed off.
+                        </p>
+                      </div>
+
+                      <div className="ml-auto shrink-0 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                        Item {index + 1}
+                      </div>
+                    </div>
+
+                    {submissionMode === "single" && (
+                      <div className="border-t border-emerald-100 bg-emerald-50/30 px-6 py-5 sm:px-8">
+                        <Link
+                          to="/"
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-3.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-lg"
                         >
-                          <div className="px-6 py-12 text-center sm:px-10 sm:py-16">
-                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                              <Sparkles size={28} />
-                            </div>
-
-                            <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
-                              Complete
-                            </p>
-
-                            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                              Thank you! Your submission is complete.
-                            </h2>
-
-                            <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
-                              Bridge has saved your final version.
-                            </p>
-                            <Link
-                              to="/"
-                              className="mx-auto mt-7 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-6 py-3.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-                            >
-                              <ArrowLeft size={17} />
-                              Back to Home
-                            </Link>
-                          </div>
-                        </article>
-                      );
-                    }
+                          <ArrowLeft size={18} />
+                          Back to Home
+                        </Link>
+                      </div>
+                    )}
+                  </article>
+                );
+              }
 
                     return (
                       <article
@@ -1656,6 +1877,7 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
       </div>
     );
   }
+  
 
   /* =====================================================
      TEMP READY FOR REVIEW SCREEN
@@ -1763,6 +1985,31 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
               />
             </label>
 
+            <div className="mt-5">
+              <label className="mb-2 block text-sm font-bold text-slate-800">
+                Upload a document
+                <span className="ml-1 font-medium text-slate-400">
+                  (optional)
+                </span>
+              </label>
+
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  setSourceFile(file);
+                }}
+                className="block w-full cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:text-sm file:font-bold file:text-[#7C3AED] hover:border-purple-300"
+              />
+
+              {sourceFile && (
+                <p className="mt-2 text-sm font-semibold text-slate-600">
+                  Selected: {sourceFile.name}
+                </p>
+              )}
+            </div>
+
             {error && (
               <div className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
                 {error}
@@ -1843,7 +2090,10 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
         <div className="mt-10 grid gap-5 md:grid-cols-3">
           <button
             type="button"
-            onClick={handleNewSubmission}
+            onClick={() => {
+              setSubmissionMode("single");
+              handleNewSubmission();
+            }}
             disabled={starting}
             className={`rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition ${
               starting
@@ -1871,6 +2121,10 @@ const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
 
           <button
             type="button"
+            onClick={() => {
+              setSubmissionMode("multiple");
+              handleNewSubmission();
+            }}
             className="cursor-pointer rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0E7FF] text-[#7C3AED]">

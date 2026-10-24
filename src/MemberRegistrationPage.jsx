@@ -1424,6 +1424,59 @@ const [showWhyModal, setShowWhyModal] = useState(false);
                         {registrationQuestion.description}
                       </p>
                     )}
+                    {registrationQuestion.allowMultiple && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4 }}
+                        className="mt-4 rounded-[16px] border-2 border-[#F2B84B] bg-gradient-to-r from-[#FFF8E8] to-[#FFF2CC] px-4 py-3.5 shadow-[0_10px_28px_rgba(242,184,75,0.18)]"
+                      >
+                        <div className="flex items-start gap-3">
+                          <motion.div
+                            animate={{
+                              scale: [1, 1.12, 1],
+                            }}
+                            transition={{
+                              duration: 1.8,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F2B84B] text-[#071A4A]"
+                          >
+                            <Sparkles size={16} />
+                          </motion.div>
+
+                          <div>
+                            <p className="text-[12px] font-black uppercase tracking-[0.08em] text-[#8A650F]">
+                              Get more from your Bridge
+                            </p>
+
+                            <p className="mt-1 flex flex-wrap gap-x-1.5 gap-y-1 text-[16px] font-bold leading-5 text-[#5F4A17]">
+                              {"Choose as many interests as you like — the more you select, the more local events and recommendations Bridge can find for you."
+                                .split(" ")
+                                .map((word, index, words) => (
+                                  <motion.span
+                                    key={`${word}-${index}`}
+                                    animate={{
+                                      scale: [1, 1.18, 1],
+                                    }}
+                                    transition={{
+                                      duration: 0.15,
+                                      delay: index * 0.20,
+                                      repeat: Infinity,
+                                      repeatDelay: words.length * 0.30 + 2,
+                                      ease: "easeInOut",
+                                    }}
+                                    className="inline-block origin-center"
+                                  >
+                                    {word}
+                                  </motion.span>
+                                ))}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
 
                     <button
                       type="button"

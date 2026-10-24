@@ -21,6 +21,7 @@ import {
   FileClock,
   Layers3,
   LogOut,
+  LoaderCircle,
 } from "lucide-react";
 
 const BRIDGE_LOGO =
@@ -535,6 +536,8 @@ useEffect(() => {
               illustration={
                 canAccessMyBridge ? (
                   <UnlockedBridgeIllustration />
+                ) : membershipComplete ? (
+                  <PreparingBridgeIllustration />
                 ) : (
                   <LockedIllustration />
                 )
@@ -544,7 +547,7 @@ useEffect(() => {
                 canAccessMyBridge
                   ? "Open your personalized Bridge experience."
                   : membershipComplete
-                    ? "Your membership is complete. Bridge is preparing your personalized My Bridge experience."
+                    ? "Bridge is working in the background to build your personalized My Bridge. This can take a couple of minutes, and this page will unlock automatically when it is ready."
                     : "Your full personalized Bridge experience unlocks after you become a member."
               }
               bullets={[
@@ -911,6 +914,36 @@ function LockedIllustration() {
       >
         <LockKeyhole size={45} strokeWidth={1.8} />
       </motion.div>
+    </div>
+  );
+}
+
+function PreparingBridgeIllustration() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute h-[150px] w-[240px] rounded-full bg-blue-300/25 blur-[30px]" />
+
+      <div className="relative flex h-[130px] w-[190px] flex-col items-center justify-center rounded-[28px] border border-blue-100 bg-white/90 shadow-[0_25px_55px_rgba(37,99,235,0.18)] backdrop-blur">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{
+            duration: 1.8,
+            repeat: Infinity,
+            ease: "linear",
+          }}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]"
+        >
+          <LoaderCircle size={32} strokeWidth={2.4} />
+        </motion.div>
+
+        <p className="mt-3 text-sm font-black text-[#071A4A]">
+          Building My Bridge
+        </p>
+
+        <p className="mt-1 text-[11px] font-semibold text-slate-400">
+          Working in the background...
+        </p>
+      </div>
     </div>
   );
 }

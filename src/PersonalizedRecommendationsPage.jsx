@@ -1408,10 +1408,70 @@ export default function PersonalizedRecommendationsPage() {
 
         const result = JSON.parse(text);
         console.log("RECOMMENDATION API RESULT:", result);
-        if (result?.success === true) {
-          sessionStorage.setItem(cacheKey, JSON.stringify(result));
-          setRawData(result);
-        }
+  if (result?.success === true) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const keepCurrentAndFutureCommunityItems = (item) => {
+      const submissionType = String(item?.submissionType || "")
+        .toLowerCase()
+        .trim();
+
+      const isActivity =
+        submissionType === "an activity, event, class, or opportunity";
+
+      // Resources and Documents should always remain.
+      if (!isActivity) {
+        return true;
+      }
+
+      // Activities without a date should not be shown.
+      if (!item?.rawDate && !item?.startDateTime) {
+        return false;
+      }
+
+      const rawDate = item.rawDate || item.startDateTime;
+      const itemDate = new Date(rawDate);
+
+      if (Number.isNaN(itemDate.getTime())) {
+        return false;
+      }
+
+      return itemDate >= today;
+    };
+
+    const cleanedResult = {
+      ...result,
+
+      recommendations: {
+        ...result.recommendations,
+
+        next14DaysItems: Array.isArray(result?.recommendations?.next14DaysItems)
+          ? result.recommendations.next14DaysItems.filter(
+              keepCurrentAndFutureCommunityItems,
+            )
+          : [],
+
+        allFutureItems: Array.isArray(result?.recommendations?.allFutureItems)
+          ? result.recommendations.allFutureItems.filter(
+              keepCurrentAndFutureCommunityItems,
+            )
+          : [],
+      },
+
+      followedSubmissions: Array.isArray(result?.followedSubmissions)
+        ? result.followedSubmissions.filter((item) =>
+            keepCurrentAndFutureCommunityItems({
+              ...item,
+              rawDate: item.startDateTime || "",
+            }),
+          )
+        : [],
+    };
+
+    sessionStorage.setItem(cacheKey, JSON.stringify(cleanedResult));
+    setRawData(cleanedResult);
+  }
       } catch (err) {
         console.error("API ERROR:", err);
       } finally {
@@ -4039,7 +4099,7 @@ export default function PersonalizedRecommendationsPage() {
             </p>
 
             <motion.a
-              href="https://bridgeaz.co/"
+              href="https://bridgenewsaz.co/"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{
@@ -4298,6 +4358,7 @@ export default function PersonalizedRecommendationsPage() {
                   </p>
                 )}
 
+                
                 <p className="mt-4 text-xs leading-5 text-slate-500">
                   Help Build a Better Connected Community
                 </p>

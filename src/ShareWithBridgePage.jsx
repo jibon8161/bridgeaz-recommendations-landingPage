@@ -22,13 +22,14 @@ const [submissionMode, setSubmissionMode] = useState("single");
   const [description, setDescription] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceFile, setSourceFile] = useState(null);
-const [uploadedSource, setUploadedSource] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [uploadedSource, setUploadedSource] = useState(null);
+  const [uploadedImageSource, setUploadedImageSource] = useState(null);
   const [question, setQuestion] = useState("");
   const [followUpAnswer, setFollowUpAnswer] = useState("");
-
-  const [starting, setStarting] = useState(false);
+const [startingMode, setStartingMode] = useState("");
   const [processing, setProcessing] = useState(false);
-
+const [showNoImageWarning, setShowNoImageWarning] = useState(false);
   const [error, setError] = useState("");
   const [reviewRecords, setReviewRecords] = useState([]);
   const [reviewForms, setReviewForms] = useState({});
@@ -39,6 +40,8 @@ const [uploadedSource, setUploadedSource] = useState(null);
   const [savedSessions, setSavedSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionTab, setSessionTab] = useState("drafts");
+  const [reviewImageFiles, setReviewImageFiles] = useState({});
+  const [pendingApproval, setPendingApproval] = useState(null);
   const getReviewRecordKey = (record, index = 0) =>
     String(
       record?.id || record?.fields?.["Submission ID"] || `review-${index}`,
@@ -215,54 +218,58 @@ const [uploadedSource, setUploadedSource] = useState(null);
      START NEW SESSION
   ===================================================== */
 
-  const handleNewSubmission = async () => {
-    try {
-      setStarting(true);
-      setError("");
+ const handleNewSubmission = async (mode = "single") => {
+   try {
+  setSubmissionMode(mode);
+  setStartingMode(mode);
+     setError("");
 
-      const currentUser = auth.currentUser;
+     const currentUser = auth.currentUser;
 
-      if (!currentUser) {
-        setError("You need to be signed in.");
-        return;
-      }
+     if (!currentUser) {
+       setError("You need to be signed in.");
+       return;
+     }
 
-      const idToken = await currentUser.getIdToken();
+     const idToken = await currentUser.getIdToken();
 
-      const response = await fetch(
-        "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/start",
-        {
-          method: "POST",
+     const response = await fetch(
+       "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/start",
+       {
+         method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-        },
-      );
+         headers: {
+           "Content-Type": "application/json",
+           Authorization: `Bearer ${idToken}`,
+         },
+       },
+     );
 
-      const data = await response.json();
+     const data = await response.json();
 
-      console.log("SHARE WITH BRIDGE START:", response.status, data);
+     console.log("SHARE WITH BRIDGE START:", response.status, data);
 
-      if (!response.ok || !data?.success || !data?.sessionId) {
-        setError(
-          data?.error || "Could not start your Share With Bridge session.",
-        );
+     if (!response.ok || !data?.success || !data?.sessionId) {
+       setError(
+         data?.error || "Could not start your Share With Bridge session.",
+       );
 
-        return;
-      }
+       return;
+     }
 
-      setSessionId(data.sessionId);
-      setScreen("new");
-    } catch (error) {
-      console.error("Share With Bridge START failed:", error);
+     setSessionId(data.sessionId);
+     setScreen("new");
 
-      setError("Could not start your Share With Bridge session.");
-    } finally {
-      setStarting(false);
-    }
-  };
+     setUploadedImageSource(null);
+     setUploadedSource(null);
+   } catch (error) {
+     console.error("Share With Bridge START failed:", error);
+
+     setError("Could not start your Share With Bridge session.");
+   } finally {
+    setStartingMode("");
+   }
+ };
 
   /* =====================================================
      FIRST PROCESS
@@ -288,6 +295,70 @@ const fileToBase64 = (file) =>
     reader.readAsDataURL(file);
   });
 
+  const handleReviewImageUpload = async (
+    recordKey,
+    currentSubmissionId,
+    file,
+  ) => {
+    if (!file) return;
+
+    try {
+      setError("");
+
+      if (!sessionId || !currentSubmissionId) {
+        setError("This submission could not be identified.");
+        return;
+      }
+
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        setError("You need to be signed in.");
+        return;
+      }
+
+      // Show the selected image immediately in the review card
+      setReviewImageFiles((current) => ({
+        ...current,
+        [recordKey]: file,
+      }));
+
+      const base64Data = await fileToBase64(file);
+      const idToken = await currentUser.getIdToken();
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/review-image",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            sessionId,
+            submissionId: currentSubmissionId,
+            fileName: file.name,
+            mimeType: file.type || "image/jpeg",
+            base64Data,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Could not save the image.");
+      }
+
+      console.log("REVIEW IMAGE SAVED:", data);
+    } catch (error) {
+      console.error("Review image upload failed:", error);
+
+      setError(error?.message || "Could not save the image.");
+    }
+  };
+
+
 
   const handleProcessSubmission = async () => {
     try {
@@ -296,12 +367,12 @@ const fileToBase64 = (file) =>
       const cleanDescription = description.trim();
       const cleanSourceUrl = sourceUrl.trim();
 
-    if (!cleanDescription && !cleanSourceUrl && !sourceFile) {
-      setError(
-        "Please describe what you want to share, add a link, or upload a document.",
-      );
-      return;
-    }
+if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
+  setError(
+    "Please describe what you want to share, add a link, upload an image, or upload a document.",
+  );
+  return;
+}
 
       if (!sessionId) {
         setError("Your Share With Bridge session is missing.");
@@ -326,6 +397,44 @@ const fileToBase64 = (file) =>
           url: cleanSourceUrl,
           kind: "website",
         });
+      }
+
+
+      if (imageFile) {
+        const base64Data = await fileToBase64(imageFile);
+
+        const uploadResponse = await fetch(
+          "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/upload",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              sessionId,
+              fileName: imageFile.name,
+              mimeType: imageFile.type || "application/octet-stream",
+              base64Data,
+            }),
+          },
+        );
+
+        const uploadData = await uploadResponse.json();
+
+        console.log(
+          "SHARE WITH BRIDGE IMAGE UPLOAD:",
+          uploadResponse.status,
+          uploadData,
+        );
+
+        if (!uploadResponse.ok || !uploadData?.success || !uploadData?.source) {
+          setError(uploadData?.error || "Could not upload the selected image.");
+          return;
+        }
+
+        processSources.push(uploadData.source);
+        setUploadedImageSource(uploadData.source);
       }
 
       if (sourceFile) {
@@ -737,6 +846,8 @@ setSubmissionMode(
                   ]
                 : []),
 
+              ...(uploadedImageSource ? [uploadedImageSource] : []),
+
               ...(uploadedSource ? [uploadedSource] : []),
             ],
 
@@ -978,108 +1089,125 @@ setSubmissionMode(
     }
   };
 
-  const handleApproveReview = async (record, index) => {
-    const recordKey = getReviewRecordKey(record, index);
-    const fields = record?.fields || {};
-    const currentSubmissionId = String(fields["Submission ID"] || "").trim();
+ const handleApproveReview = async (
+   record,
+   index,
+   skipImageWarning = false,
+ ) => {
+   const recordKey = getReviewRecordKey(record, index);
+   const fields = record?.fields || {};
+   const currentSubmissionId = String(fields["Submission ID"] || "").trim();
 
-    try {
-      setError("");
-      setReviewApprovedId("");
+   try {
+     setError("");
+     setReviewApprovedId("");
 
-      if (!sessionId) {
-        setError("Your Share With Bridge session is missing.");
-        return;
-      }
+     if (!sessionId) {
+       setError("Your Share With Bridge session is missing.");
+       return;
+     }
 
-      if (!currentSubmissionId) {
-        setError("This Share With Bridge submission ID is missing.");
-        return;
-      }
+     if (!currentSubmissionId) {
+       setError("This Share With Bridge submission ID is missing.");
+       return;
+     }
 
-      /*
+     /*
       Require the member to save their latest edits first.
     */
-      if (reviewSavedId !== recordKey) {
-        setError(
-          "Please save your latest changes before approving this submission.",
-        );
-        return;
-      }
+if (reviewSavedId !== recordKey) {
+  setError("Please save your latest changes before approving this submission.");
+  return;
+}
 
-      const currentUser = auth.currentUser;
+const imageAttachments = Array.isArray(fields["Image"]) ? fields["Image"] : [];
 
-      if (!currentUser) {
-        setError("You need to be signed in.");
-        return;
-      }
+const hasImage =
+  imageAttachments.length > 0 || Boolean(reviewImageFiles[recordKey]);
 
-      setApprovingReviewId(recordKey);
+if (!hasImage && !skipImageWarning) {
+  setPendingApproval({
+    record,
+    index,
+  });
 
-      const idToken = await currentUser.getIdToken();
+  setShowNoImageWarning(true);
+  return;
+}
 
-      const response = await fetch(
-        "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/review-approve",
-        {
-          method: "POST",
+const currentUser = auth.currentUser;
 
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
+     if (!currentUser) {
+       setError("You need to be signed in.");
+       return;
+     }
 
-          body: JSON.stringify({
-            sessionId,
-            submissionId: currentSubmissionId,
-            confirmApproval: true,
-          }),
-        },
-      );
+     setApprovingReviewId(recordKey);
 
-      const data = await response.json();
+     const idToken = await currentUser.getIdToken();
 
-      console.log("SHARE WITH BRIDGE REVIEW_APPROVE:", response.status, data);
+     const response = await fetch(
+       "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/review-approve",
+       {
+         method: "POST",
 
-      if (!response.ok || !data?.success) {
-        setError(
-          data?.message || data?.error || "Could not approve this submission.",
-        );
+         headers: {
+           "Content-Type": "application/json",
+           Authorization: `Bearer ${idToken}`,
+         },
 
-        return;
-      }
+         body: JSON.stringify({
+           sessionId,
+           submissionId: currentSubmissionId,
+           confirmApproval: true,
+         }),
+       },
+     );
 
-      const returnedFields = data?.record?.fields || null;
+     const data = await response.json();
 
-      setReviewRecords((current) =>
-        current.map((item, itemIndex) => {
-          const itemKey = getReviewRecordKey(item, itemIndex);
+     console.log("SHARE WITH BRIDGE REVIEW_APPROVE:", response.status, data);
 
-          if (itemKey !== recordKey) {
-            return item;
-          }
+     if (!response.ok || !data?.success) {
+       setError(
+         data?.message || data?.error || "Could not approve this submission.",
+       );
 
-          return {
-            ...item,
-            fields: {
-              ...(item?.fields || {}),
-              ...(returnedFields || {}),
-              Status: "Signed Off",
-              "Contributor Signed Off": true,
-            },
-          };
-        }),
-      );
+       return;
+     }
 
-      setReviewApprovedId(recordKey);
-      setReviewSavedId("");
-    } catch (error) {
-      console.error("Share With Bridge REVIEW_APPROVE failed:", error);
+     const returnedFields = data?.record?.fields || null;
 
-      setError("Could not approve this submission.");
-    } finally {
-      setApprovingReviewId("");
-    }
-  };
+     setReviewRecords((current) =>
+       current.map((item, itemIndex) => {
+         const itemKey = getReviewRecordKey(item, itemIndex);
+
+         if (itemKey !== recordKey) {
+           return item;
+         }
+
+         return {
+           ...item,
+           fields: {
+             ...(item?.fields || {}),
+             ...(returnedFields || {}),
+             Status: "Signed Off",
+             "Contributor Signed Off": true,
+           },
+         };
+       }),
+     );
+
+     setReviewApprovedId(recordKey);
+     setReviewSavedId("");
+   } catch (error) {
+     console.error("Share With Bridge REVIEW_APPROVE failed:", error);
+
+     setError("Could not approve this submission.");
+   } finally {
+     setApprovingReviewId("");
+   }
+ };
 
   /* =====================================================
      RESET
@@ -1334,7 +1462,7 @@ setSubmissionMode("single");
             </h1>
 
             <p className="mt-3 text-base leading-7 text-slate-600">
-              Bridge AI found most of what it needs, but it needs a little more
+              Bridge  found most of what it needs, but it needs a little more
               information before preparing your submission for review.
             </p>
           </div>
@@ -1376,7 +1504,7 @@ setSubmissionMode("single");
             >
               {processing && <Loader2 size={18} className="animate-spin" />}
 
-              {processing ? "Bridge AI is updating..." : "Continue"}
+              {processing ? "Bridge is updating..." : "Continue"}
             </button>
           </div>
         </div>
@@ -1407,6 +1535,7 @@ setSubmissionMode("single");
       ) {
         return (
           <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+            
             <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
               <div className="mt-8 overflow-hidden rounded-[32px] border border-emerald-100 bg-white shadow-sm">
                 <div className="px-6 py-14 text-center sm:px-10 sm:py-16">
@@ -1452,6 +1581,54 @@ setSubmissionMode("single");
       }
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+        {showNoImageWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Share without an image?
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Everything looks better with an image. Are you sure you want to
+                share this item without an image?
+              </p>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNoImageWarning(false);
+                    setPendingApproval(null);
+                  }}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Add an image
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const approval = pendingApproval;
+
+                    setShowNoImageWarning(false);
+                    setPendingApproval(null);
+
+                    if (approval) {
+                      handleApproveReview(
+                        approval.record,
+                        approval.index,
+                        true,
+                      );
+                    }
+                  }}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Approve without image
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
           <button
             type="button"
@@ -1471,7 +1648,7 @@ setSubmissionMode("single");
                   </div>
 
                   <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-[#8B5CF6]">
-                    Bridge AI review
+                    Bridge review
                   </p>
 
                   <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
@@ -1531,58 +1708,67 @@ setSubmissionMode("single");
                     const status = fields["Status"] || "In review";
 
                     const currentSubmissionId = fields["Submission ID"] || "";
+
+                    const imageAttachments = Array.isArray(fields["Image"])
+                      ? fields["Image"]
+                      : [];
+
+                    const currentImageUrl = imageAttachments[0]?.url || "";
+                    const currentImageName =
+                      imageAttachments[0]?.filename || "";
+
                     const isSaving = savingReviewId === recordKey;
                     const isSaved = reviewSavedId === recordKey;
                     const isApproving = approvingReviewId === recordKey;
-                  const isApproved =
-                    reviewApprovedId === recordKey ||
-                    fields["Status"] === "Signed Off" ||
-                    fields["Contributor Signed Off"] === true;
+                    const isApproved =
+                      reviewApprovedId === recordKey ||
+                      fields["Status"] === "Signed Off" ||
+                      fields["Contributor Signed Off"] === true;
 
-              if (isApproved) {
-                return (
-                  <article
-                    key={recordKey}
-                    className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm"
-                  >
-                    <div className="flex items-center gap-4 px-6 py-6 sm:px-8">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                        <Sparkles size={22} />
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">
-                          Approved
-                        </p>
-
-                        <h3 className="mt-1 text-lg font-bold text-slate-900">
-                          {form.title || `Item ${index + 1}`}
-                        </h3>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                          This submission has been signed off.
-                        </p>
-                      </div>
-
-                      <div className="ml-auto shrink-0 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
-                        Item {index + 1}
-                      </div>
-                    </div>
-
-                    {submissionMode === "single" && (
-                      <div className="border-t border-emerald-100 bg-emerald-50/30 px-6 py-5 sm:px-8">
-                        <Link
-                          to="/"
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-3.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                    if (isApproved) {
+                      return (
+                        <article
+                          key={recordKey}
+                          className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm"
                         >
-                          <ArrowLeft size={18} />
-                          Back to Home
-                        </Link>
-                      </div>
-                    )}
-                  </article>
-                );
-              }
+                          <div className="flex items-center gap-4 px-6 py-6 sm:px-8">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                              <Sparkles size={22} />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">
+                                Approved
+                              </p>
+
+                              <h3 className="mt-1 text-lg font-bold text-slate-900">
+                                {form.title || `Item ${index + 1}`}
+                              </h3>
+
+                              <p className="mt-1 text-sm text-slate-500">
+                                This submission has been signed off.
+                              </p>
+                            </div>
+
+                            <div className="ml-auto shrink-0 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                              Item {index + 1}
+                            </div>
+                          </div>
+
+                          {submissionMode === "single" && (
+                            <div className="border-t border-emerald-100 bg-emerald-50/30 px-6 py-5 sm:px-8">
+                              <Link
+                                to="/"
+                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-3.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                              >
+                                <ArrowLeft size={18} />
+                                Back to Home
+                              </Link>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    }
 
                     return (
                       <article
@@ -1624,6 +1810,65 @@ setSubmissionMode("single");
 
                             <div className="shrink-0 rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
                               Item {index + 1}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-b border-slate-100 px-5 py-5 sm:px-7">
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                            Image
+                          </p>
+
+                          <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
+                            {reviewImageFiles[recordKey] || currentImageUrl ? (
+                              <img
+                                src={
+                                  reviewImageFiles[recordKey]
+                                    ? URL.createObjectURL(
+                                        reviewImageFiles[recordKey],
+                                      )
+                                    : currentImageUrl
+                                }
+                                alt={currentImageName || "Submission image"}
+                                className="h-32 w-44 rounded-2xl border border-slate-200 object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-32 w-44 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-xs font-semibold text-slate-400">
+                                No image added yet
+                              </div>
+                            )}
+
+                            <div>
+                              <label className="inline-flex cursor-pointer rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#7C3AED] transition hover:bg-purple-50">
+                                {reviewImageFiles[recordKey] || currentImageUrl
+                                  ? "Change Image"
+                                  : "Add Image"}
+
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    const file = event.target.files?.[0];
+
+                                    if (!file) return;
+
+                                    handleReviewImageUpload(
+                                      recordKey,
+                                      currentSubmissionId,
+                                      file,
+                                    );
+                                  }}
+                                />
+                              </label>
+
+                              {(reviewImageFiles[recordKey] ||
+                                currentImageName) && (
+                                <p className="mt-2 max-w-xs truncate text-xs text-slate-500">
+                                  {reviewImageFiles[recordKey]?.name ||
+                                    currentImageName}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1693,7 +1938,7 @@ setSubmissionMode("single");
 
                             <section className="rounded-2xl border border-slate-200 p-4">
                               <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
-                                AI suggested keywords
+                                suggested keywords
                               </p>
 
                               {suggestedKeywords.length > 0 ? (
@@ -1897,7 +2142,7 @@ setSubmissionMode("single");
             </h1>
 
             <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
-              Bridge AI has prepared your submission. The review screen is the
+              Bridge has prepared your submission. The review screen is the
               next part we&apos;ll connect.
             </p>
 
@@ -1940,12 +2185,15 @@ setSubmissionMode("single");
             </div>
 
             <h1 className="mt-5 text-3xl font-bold text-slate-900 sm:text-4xl">
-              New Submission
+              {submissionMode === "multiple"
+                ? "Multiple Submissions"
+                : "Single Submission"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-              Tell Bridge what you want to share. You can describe it in your
-              own words, paste a link, or do both.
+              {submissionMode === "multiple"
+                ? "Share several items one at a time. For each item, you can describe it, paste a link, upload an image or document, or combine them."
+                : "Tell Bridge what you want to share. You can describe it, paste a link, upload an image or document, or combine them."}
             </p>
           </div>
 
@@ -1985,29 +2233,222 @@ setSubmissionMode("single");
               />
             </label>
 
-            <div className="mt-5">
-              <label className="mb-2 block text-sm font-bold text-slate-800">
-                Upload a document
-                <span className="ml-1 font-medium text-slate-400">
-                  (optional)
-                </span>
-              </label>
+            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              {/* IMAGE */}
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-5">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Upload an image
+                  </h3>
 
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,image/*"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] || null;
-                  setSourceFile(file);
-                }}
-                className="block w-full cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:text-sm file:font-bold file:text-[#7C3AED] hover:border-purple-300"
-              />
+                  <span className="text-sm text-slate-400">(optional)</span>
+                </div>
 
-              {sourceFile && (
-                <p className="mt-2 text-sm font-semibold text-slate-600">
-                  Selected: {sourceFile.name}
+                <label
+                  htmlFor="image-upload"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+
+                    const file = event.dataTransfer.files?.[0] || null;
+
+                    if (!file) return;
+
+                    const allowedTypes = [
+                      "image/jpeg",
+                      "image/png",
+                      "image/webp",
+                    ];
+
+                    if (!allowedTypes.includes(file.type)) {
+                      setError("Please upload a JPG, PNG, or WEBP image.");
+                      return;
+                    }
+
+                    setError("");
+                    setImageFile(file);
+                  }}
+                  className="mt-4 flex cursor-pointer items-center overflow-hidden rounded-xl border border-purple-200 bg-white transition hover:border-[#8B5CF6]"
+                >
+                  <div className="border-r border-purple-200 bg-purple-50 px-5 py-4 text-sm font-bold text-[#7C3AED]">
+                    Choose an image
+                  </div>
+
+                  <div className="min-w-0 flex-1 px-4 py-3 text-sm text-slate-500">
+                    {imageFile ? (
+                      imageFile.name
+                    ) : (
+                      <div>
+                        <p className="font-semibold text-slate-600">
+                          Drag & drop here
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          or click to browse
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <input
+                    id="image-upload"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+
+                      if (file) {
+                        setError("");
+                        setImageFile(file);
+                      }
+                    }}
+                  />
+                </label>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  Recommended: JPG, PNG or WEBP
                 </p>
-              )}
+
+                {imageFile && (
+                  <div className="mt-4 flex items-center gap-4 rounded-xl bg-white/70 p-3">
+                    <img
+                      src={URL.createObjectURL(imageFile)}
+                      alt="Selected preview"
+                      className="h-20 w-24 rounded-lg object-cover"
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-500">Selected image:</p>
+
+                      <p className="truncate text-sm font-bold text-slate-900">
+                        {imageFile.name}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setImageFile(null)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                      aria-label="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* DOCUMENT */}
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-5">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Upload a document
+                  </h3>
+
+                  <span className="text-sm text-slate-400">(optional)</span>
+                </div>
+
+                <label
+                  htmlFor="document-upload"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+
+                    const file = event.dataTransfer.files?.[0] || null;
+
+                    if (!file) return;
+
+                    const fileName = file.name.toLowerCase();
+
+                    const allowedExtensions = [
+                      ".pdf",
+                      ".doc",
+                      ".docx",
+                      ".txt",
+                      ".csv",
+                      ".xls",
+                      ".xlsx",
+                    ];
+
+                    const isAllowed = allowedExtensions.some((extension) =>
+                      fileName.endsWith(extension),
+                    );
+
+                    if (!isAllowed) {
+                      setError(
+                        "Please upload a PDF, DOC, DOCX, TXT, CSV, XLS, or XLSX file.",
+                      );
+                      return;
+                    }
+
+                    setError("");
+                    setSourceFile(file);
+                  }}
+                  className="mt-4 flex cursor-pointer items-center overflow-hidden rounded-xl border border-purple-200 bg-white transition hover:border-[#8B5CF6]"
+                >
+                  <div className="border-r border-purple-200 bg-purple-50 px-5 py-4 text-sm font-bold text-[#7C3AED]">
+                    Choose a document
+                  </div>
+
+                  <div className="min-w-0 flex-1 px-4 py-3 text-sm text-slate-500">
+                    {sourceFile ? (
+                      sourceFile.name
+                    ) : (
+                      <div>
+                        <p className="font-semibold text-slate-600">
+                          Drag & drop here
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          or click to browse
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <input
+                    id="document-upload"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+
+                      if (file) {
+                        setError("");
+                        setSourceFile(file);
+                      }
+                    }}
+                  />
+                </label>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  Accepted formats: PDF, DOC, DOCX, TXT, CSV, XLS, XLSX
+                </p>
+
+                {sourceFile && (
+                  <div className="mt-4 flex items-center gap-4 rounded-xl bg-white/70 p-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-[#7C3AED]">
+                      <FileClock size={21} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-500">Selected file:</p>
+
+                      <p className="truncate text-sm font-bold text-slate-900">
+                        {sourceFile.name}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSourceFile(null)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                      aria-label="Remove document"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {error && (
@@ -2029,8 +2470,8 @@ setSubmissionMode("single");
               {processing && <Loader2 size={18} className="animate-spin" />}
 
               {processing
-                ? "Bridge AI is preparing..."
-                : "Continue with Bridge AI"}
+                ? "Bridge is preparing..."
+                : "Continue with Bridge"}
             </button>
 
             <button
@@ -2047,6 +2488,51 @@ setSubmissionMode("single");
             </button>
           </div>
         </div>
+        {showNoImageWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Share without an image?
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Everything looks better with an image. Are you sure you want to
+                share this item without an image?
+              </p>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowNoImageWarning(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Add an image
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const approval = pendingApproval;
+
+                    setShowNoImageWarning(false);
+                    setPendingApproval(null);
+
+                    if (approval) {
+                      handleApproveReview(
+                        approval.record,
+                        approval.index,
+                        true,
+                      );
+                    }
+                  }}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Approve without image
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2076,7 +2562,7 @@ setSubmissionMode("single");
           </h1>
 
           <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            Tell us what you want to share. Bridge AI will help prepare it, then
+            Tell us what you want to share. Bridge will help prepare it, then
             you&apos;ll review everything before approving it.
           </p>
         </div>
@@ -2088,21 +2574,19 @@ setSubmissionMode("single");
         )}
 
         <div className="mt-10 grid gap-5 md:grid-cols-3">
+          {/* NEW SUBMISSION */}
           <button
             type="button"
-            onClick={() => {
-              setSubmissionMode("single");
-              handleNewSubmission();
-            }}
-            disabled={starting}
+            onClick={() => handleNewSubmission("single")}
+            disabled={Boolean(startingMode)}
             className={`rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition ${
-              starting
+              startingMode
                 ? "cursor-wait opacity-70"
                 : "cursor-pointer hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg"
             }`}
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0E7FF] text-[#7C3AED]">
-              {starting ? (
+              {startingMode === "single" ? (
                 <Loader2 size={23} className="animate-spin" />
               ) : (
                 <Plus size={23} />
@@ -2110,7 +2594,7 @@ setSubmissionMode("single");
             </div>
 
             <h2 className="mt-5 text-lg font-bold text-slate-900">
-              {starting ? "Starting..." : "New Submission"}
+              {startingMode === "single" ? "Starting..." : "Single Submission"}
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -2119,20 +2603,29 @@ setSubmissionMode("single");
             </p>
           </button>
 
+          {/* MULTIPLE SUBMISSIONS */}
           <button
             type="button"
-            onClick={() => {
-              setSubmissionMode("multiple");
-              handleNewSubmission();
-            }}
-            className="cursor-pointer rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg"
+            onClick={() => handleNewSubmission("multiple")}
+            disabled={Boolean(startingMode)}
+            className={`rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition ${
+              startingMode
+                ? "cursor-wait opacity-70"
+                : "cursor-pointer hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg"
+            }`}
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0E7FF] text-[#7C3AED]">
-              <Layers3 size={23} />
+              {startingMode === "multiple" ? (
+                <Loader2 size={23} className="animate-spin" />
+              ) : (
+                <Layers3 size={23} />
+              )}
             </div>
 
             <h2 className="mt-5 text-lg font-bold text-slate-900">
-              Multiple Submissions
+              {startingMode === "multiple"
+                ? "Starting..."
+                : "Multiple Submissions"}
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -2140,18 +2633,27 @@ setSubmissionMode("single");
             </p>
           </button>
 
+          {/* DRAFTS & PREVIOUS */}
           <button
             type="button"
             onClick={handleLoadSessions}
-            disabled={loadingSessions}
-            className="cursor-pointer rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg"
+            disabled={loadingSessions || Boolean(startingMode)}
+            className={`rounded-3xl border border-purple-100 bg-white p-6 text-left shadow-sm transition ${
+              loadingSessions || startingMode
+                ? "cursor-wait opacity-70"
+                : "cursor-pointer hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg"
+            }`}
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0E7FF] text-[#7C3AED]">
-              <FileClock size={23} />
+              {loadingSessions ? (
+                <Loader2 size={23} className="animate-spin" />
+              ) : (
+                <FileClock size={23} />
+              )}
             </div>
 
             <h2 className="mt-5 text-lg font-bold text-slate-900">
-              Drafts & Previous
+              {loadingSessions ? "Loading..." : "Drafts & Previous"}
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -2161,6 +2663,7 @@ setSubmissionMode("single");
           </button>
         </div>
       </div>
+    
     </div>
   );
 }

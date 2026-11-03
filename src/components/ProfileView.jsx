@@ -5,7 +5,7 @@ import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import FloatingScene from "./FloatingScene";
 
 import InterestManager from "./InterestManager";
-import ProfileRecommendations from "./ProfileRecommendations";
+// import ProfileRecommendations from "./ProfileRecommendations";
 import BridgeQuestionCard from "./BridgeQuestionCard";
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
@@ -5573,13 +5573,13 @@ const liveSharedCount = sharedContributions.length;
 
       <BridgeQuestionCard token={token} theme={theme} variant="profile" />
 
-      <ProfileRecommendations
+      {/* <ProfileRecommendations
         rawData={profileData}
         profile={{
           theme,
         }}
         token={token}
-      />
+      /> */}
 
       {/* =====================================================
           CONTRIBUTIONS

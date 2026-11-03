@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-
+import { enableBridgeNotifications } from "./notifications";
 import { motion } from "framer-motion";
-
+import { onMessage } from "firebase/messaging";
+import { messaging } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-
+import homeImage from "./assets/homeImage.png";
 import { auth } from "./firebase";
 
 import {
@@ -22,22 +23,64 @@ import {
   Layers3,
   LogOut,
   LoaderCircle,
+  Bell,
 } from "lucide-react";
 
 const BRIDGE_LOGO =
   "https://mcusercontent.com/2ead8cf9844eae73676cdedb6/images/5c553236-b34b-a985-35dd-24d9bba8f0a1.png";
 
-const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=2200&q=88";
+const HERO_IMAGE = homeImage;
+
+const HOW_TO_VIDEOS = [
+  {
+    title: "Welcome to Bridge",
+    url: "https://drive.google.com/file/d/18w5TZOZFaJn0iZO2ocIVnWzZWNbYeg59/view?usp=sharing",
+  },
+  {
+    title: "Share with Bridge",
+    url: "https://drive.google.com/file/d/1TGRtU3DXrb7An5-ZtRXNpamGKwNqEV2v/view?usp=sharing",
+  },
+  {
+    title: "Your Local Interests",
+    url: "https://drive.google.com/file/d/12boIR9PWlH-gBif3eV6yFJxSut9U5CBK/view?usp=sharing",
+  },
+  {
+    title: "Connect On Bridge",
+    url: "https://drive.google.com/file/d/1BGhhZBsyePzzoGztNb2kaP3eks7QRXoS/view?usp=sharing",
+  },
+];
+
+const getDrivePreviewUrl = (url) => {
+  if (!url) return "";
+
+  return url
+    .replace("/view?usp=sharing", "/preview")
+    .replace("/view", "/preview");
+};
 
 export default function MyBridgeHome() {
   const [user, setUser] = useState(null);
 
   // Actual Bridge member returned from Airtable through backend
   const [bridgeMember, setBridgeMember] = useState(null);
-
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
+  const [notificationOpen, setNotificationOpen] = useState(false);
+
+  const [inAppNotifications, setInAppNotifications] = useState([]);
+
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  const [inAppNotificationsLoading, setInAppNotificationsLoading] =
+    useState(false);
+
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    Notification.permission === "granted",
+  );
+  const [selectedVideo, setSelectedVideo] = useState(null);
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -55,6 +98,71 @@ export default function MyBridgeHome() {
   */
 
   useEffect(() => {
+    const syncInstallPrompt = () => {
+      if (window.__bridgeInstallPrompt) {
+        setInstallPrompt(window.__bridgeInstallPrompt);
+      }
+    };
+
+    const handleInstalled = () => {
+      setIsAppInstalled(true);
+      setInstallPrompt(null);
+    };
+
+    syncInstallPrompt();
+
+    window.addEventListener("bridge-install-ready", syncInstallPrompt);
+
+    window.addEventListener("bridge-app-installed", handleInstalled);
+
+    return () => {
+      window.removeEventListener("bridge-install-ready", syncInstallPrompt);
+
+      window.removeEventListener("bridge-app-installed", handleInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+
+    installPrompt.prompt();
+
+    const choiceResult = await installPrompt.userChoice;
+
+    if (choiceResult.outcome === "accepted") {
+      setIsAppInstalled(true);
+    }
+
+    setInstallPrompt(null);
+  };
+
+  const handleEnableNotifications = async () => {
+    try {
+      setNotificationLoading(true);
+
+      const result = await enableBridgeNotifications();
+
+      if (result.success) {
+        setNotificationsEnabled(true);
+        return;
+      }
+
+      if (result.permission === "denied") {
+        alert(
+          "Notifications are blocked in your browser. Please allow notifications for My Bridge in your browser settings.",
+        );
+        return;
+      }
+
+      console.error("Could not enable notifications:", result);
+    } catch (error) {
+      console.error("Enable notifications failed:", error);
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
 
@@ -65,6 +173,8 @@ export default function MyBridgeHome() {
 
     return unsubscribe;
   }, []);
+
+
 
   /*
     -------------------------------------------------------
@@ -78,16 +188,17 @@ export default function MyBridgeHome() {
     -------------------------------------------------------
   */
 
-const refreshBridgeMember = useCallback(async () => {
-  if (!user) {
-    return null;
-  }
+  
+const loadInAppNotifications = useCallback(async () => {
+  if (!user) return;
 
   try {
     const idToken = await user.getIdToken();
 
+    setInAppNotificationsLoading(true);
+
     const response = await fetch(
-      "https://bridgeaz-recommendations-server.vercel.app/api/auth/me",
+      "https://bridgeaz-recommendations-server.vercel.app/api/notifications",
       {
         headers: {
           Authorization: `Bearer ${idToken}`,
@@ -97,37 +208,183 @@ const refreshBridgeMember = useCallback(async () => {
 
     const data = await response.json();
 
-    console.log("BACKEND AUTH TEST:", data);
-
-    if (response.ok && data.success && data.memberFound && data.member) {
-      return data.member;
+    if (!response.ok || !data.success) {
+      console.error("Could not load notifications:", data);
+      return;
     }
 
-    return null;
-  } catch (error) {
-    console.error("Backend auth test failed:", error);
+    setInAppNotifications(
+      Array.isArray(data.notifications) ? data.notifications : [],
+    );
 
-    return null;
+    setUnreadNotificationCount(Number(data.unreadCount) || 0);
+  } catch (error) {
+    console.error("Load notifications failed:", error);
+  } finally {
+    setInAppNotificationsLoading(false);
   }
 }, [user]);
+  
+
+
+  const handleDeleteNotification = async (notificationId) => {
+    if (!user || !notificationId) return;
+
+    try {
+      const idToken = await user.getIdToken();
+
+      const response = await fetch(
+        `https://bridgeaz-recommendations-server.vercel.app/api/notifications/${notificationId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error("Could not delete notification:", data);
+        return;
+      }
+
+      setInAppNotifications((current) =>
+        current.filter((item) => item.id !== notificationId),
+      );
+
+      const deletedNotification = inAppNotifications.find(
+        (item) => item.id === notificationId,
+      );
+
+      if (deletedNotification && !deletedNotification.read) {
+        setUnreadNotificationCount((current) => Math.max(0, current - 1));
+      }
+    } catch (error) {
+      console.error("Delete notification failed:", error);
+    }
+  };
+
+  const handleClearAllNotifications = async () => {
+    if (!user) return;
+
+    try {
+      const idToken = await user.getIdToken();
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/notifications",
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error("Could not clear notifications:", data);
+        return;
+      }
+
+      setInAppNotifications([]);
+      setUnreadNotificationCount(0);
+    } catch (error) {
+      console.error("Clear notifications failed:", error);
+    }
+  };
 
 useEffect(() => {
-  if (!user) {
-    return;
-  }
+  const unsubscribe = onMessage(messaging, async (payload) => {
+    console.log("FOREGROUND PUSH:", payload);
 
-  let cancelled = false;
+    const registration = await navigator.serviceWorker.ready;
 
-  refreshBridgeMember().then((member) => {
-    if (!cancelled) {
-      setBridgeMember(member);
-    }
+    await registration.showNotification(
+      payload.notification?.title || payload.data?.title || "My Bridge",
+      {
+        body:
+          payload.notification?.body ||
+          payload.data?.body ||
+          "You have a new Bridge update.",
+
+        icon: "/pwa-192x192.png",
+        badge: "/pwa-192x192.png",
+
+        data: {
+          url: payload.data?.url || "/",
+        },
+      },
+    );
+
+    await loadInAppNotifications();
   });
 
-  return () => {
-    cancelled = true;
+  return unsubscribe;
+}, [loadInAppNotifications]);
+
+useEffect(() => {
+  if (!user) return;
+
+  const loadNotifications = async () => {
+    await loadInAppNotifications();
   };
-}, [user, refreshBridgeMember]);
+
+  loadNotifications();
+}, [user, loadInAppNotifications]);
+  
+  const refreshBridgeMember = useCallback(async () => {
+    if (!user) {
+      return null;
+    }
+
+    try {
+      const idToken = await user.getIdToken();
+
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/auth/me",
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      console.log("BACKEND AUTH TEST:", data);
+
+      if (response.ok && data.success && data.memberFound && data.member) {
+        return data.member;
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Backend auth test failed:", error);
+
+      return null;
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    refreshBridgeMember().then((member) => {
+      if (!cancelled) {
+        setBridgeMember(member);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, refreshBridgeMember]);
 
   /*
     -------------------------------------------------------
@@ -150,7 +407,7 @@ useEffect(() => {
 
   const canAccessMyBridge =
     membershipComplete && Boolean(bridgeMember?.myBridgeToken);
-  
+
   useEffect(() => {
     if (!user) {
       return;
@@ -188,7 +445,6 @@ useEffect(() => {
     bridgeMember?.myBridgeToken,
     refreshBridgeMember,
   ]);
-  
 
   /*
     -------------------------------------------------------
@@ -205,6 +461,8 @@ useEffect(() => {
     -------------------------------------------------------
   */
 
+
+
   const displayName = bridgeMember?.fullName || "Bridge Member";
 
   const profilePhoto = bridgeMember?.profilePhoto || "";
@@ -215,25 +473,38 @@ useEffect(() => {
           NAVBAR
       ===================================================== */}
 
-      <header className="relative z-50 border-b border-slate-200/80 bg-white">
-        <div className="mx-auto flex h-[78px] max-w-[1450px] items-center justify-between px-5 md:px-8">
+      {(accountOpen || notificationOpen) && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={() => {
+            setAccountOpen(false);
+            setNotificationOpen(false);
+          }}
+          className="fixed inset-0 z-40 cursor-default bg-transparent"
+        />
+      )}
+
+      <header className="relative z-50 border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6">
           <div className="flex items-center gap-10">
-            <div className="flex h-[78px] w-[185px] items-center justify-start">
+            <div className="flex h-18 items-center">
               <img
                 src={BRIDGE_LOGO}
                 alt="BridgeAZ"
-                className="max-h-[58px] w-auto max-w-[180px] object-contain"
+                className="h-12 w-auto object-contain"
               />
             </div>
 
-            <nav className="hidden h-full items-center gap-8 lg:flex">
-              <NavItem icon={Home} label="Home" active />
-
-              <NavItem label="Become a Member" />
-
-              <NavItem label="Share With Bridge" />
-
-              <NavItem label="My Bridge" locked={!canAccessMyBridge} />
+            <nav className="hidden h-full  items-center gap-8 lg:flex">
+              <NavItem
+                icon={Home}
+                label="Home"
+                active
+                onClick={() => {
+                  window.location.href = "/";
+                }}
+              />
             </nav>
           </div>
 
@@ -241,68 +512,174 @@ useEffect(() => {
               ACTUAL AIRTABLE MEMBER
           ===================================================== */}
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setAccountOpen((prev) => !prev)}
-              className="flex items-center gap-3 rounded-2xl px-2 py-1.5 transition hover:bg-slate-50"
-            >
-              {profilePhoto ? (
-                <img
-                  src={profilePhoto}
-                  alt={displayName}
-                  className="h-11 w-11 rounded-full border-2 border-white object-cover shadow-md"
-                />
-              ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[#071A4A] to-[#2563EB] text-sm font-black uppercase text-white">
-                  {displayName.charAt(0)}
+          <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setNotificationOpen((prev) => !prev);
+                  setAccountOpen(false);
+                }}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full text-[#071A4A] transition hover:bg-slate-100"
+                aria-label="Notifications"
+              >
+                <Bell size={21} strokeWidth={2.3} />
+
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute right-0 top-0 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
+                    {unreadNotificationCount > 99
+                      ? "99+"
+                      : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationOpen && (
+                <div className="absolute right-0 top-[52px] z-[110] w-[360px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(7,26,74,0.18)]">
+                  <div className="border-b border-slate-100 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-black text-[#071A4A]">
+                          Notifications
+                        </p>
+
+                        {unreadNotificationCount > 0 && (
+                          <p className="mt-0.5 text-[10px] font-bold text-[#2563EB]">
+                            {unreadNotificationCount} new
+                          </p>
+                        )}
+                      </div>
+
+                      {inAppNotifications.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClearAllNotifications}
+                          className="rounded-lg px-2.5 py-1.5 text-[11px] font-black text-red-500 transition hover:bg-red-50"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="max-h-[420px] overflow-y-auto">
+                    {inAppNotificationsLoading ? (
+                      <div className="px-5 py-8 text-center text-sm font-semibold text-slate-400">
+                        Loading notifications...
+                      </div>
+                    ) : inAppNotifications.length === 0 ? (
+                      <div className="px-5 py-8 text-center text-sm font-semibold text-slate-400">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      inAppNotifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className={`flex w-full gap-3 border-b border-slate-100 px-5 py-4 ${
+                            !notification.read ? "bg-blue-50/50" : "bg-white"
+                          }`}
+                        >
+                          <div
+                            className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+                              !notification.read
+                                ? "bg-[#2563EB]"
+                                : "bg-slate-200"
+                            }`}
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-black text-[#071A4A]">
+                              {notification.title || "My Bridge"}
+                            </p>
+
+                            <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
+                              {notification.body}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteNotification(notification.id)
+                            }
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-lg font-bold text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                            aria-label="Delete notification"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
+            </div>
 
-              <div className="hidden text-left sm:block">
-                <p className="text-[11px] font-medium text-slate-400">
-                  Welcome
-                </p>
+            {/* Account Menu */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setAccountOpen((prev) => !prev)}
+                className="flex items-center gap-3 rounded-2xl px-2 py-1.5 transition hover:bg-slate-50"
+              >
+                {profilePhoto ? (
+                  <img
+                    src={profilePhoto}
+                    alt={displayName}
+                    className="h-11 w-11 rounded-full border-2 border-white object-cover shadow-md"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-linear-to-br from-[#071A4A] to-[#2563EB] text-sm font-black uppercase text-white">
+                    {displayName.charAt(0)}
+                  </div>
+                )}
 
-                <div className="flex items-center gap-1">
-                  <p className="max-w-[150px] truncate text-sm font-black text-[#071A4A]">
-                    {displayName}
+                <div className="hidden text-left sm:block">
+                  <p className="text-[11px] font-medium text-slate-400">
+                    Welcome
                   </p>
 
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform ${
-                      accountOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </div>
-              </div>
-            </button>
+                  <div className="flex items-center gap-1">
+                    <p className="max-w-37.5 truncate text-sm font-black text-[#071A4A]">
+                      {displayName}
+                    </p>
 
-            {accountOpen && (
-              <motion.div
-                initial={{
-                  opacity: 0,
-                  y: 8,
-                  scale: 0.98,
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                  scale: 1,
-                }}
-                className="absolute right-0 top-[58px] z-[100] w-[220px] rounded-[18px] border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(7,26,74,0.16)]"
-              >
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-red-600 transition hover:bg-red-50"
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${
+                        accountOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </div>
+                </div>
+              </button>
+
+              {accountOpen && (
+                <motion.div
+                  initial={{
+                    opacity: 0,
+                    y: 8,
+                    scale: 0.98,
+                  }}
+                  animate={{
+                    opacity: 1,
+                    y: 0,
+                    scale: 1,
+                  }}
+                  className="absolute right-0 top-[58px] z-[100] w-[220px] rounded-[18px] border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(7,26,74,0.16)]"
                 >
-                  <LogOut size={17} />
-                  Log Out
-                </button>
-              </motion.div>
-            )}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-red-600 transition hover:bg-red-50"
+                  >
+                    <LogOut size={17} />
+                    Log Out
+                  </button>
+                </motion.div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -473,6 +850,8 @@ useEffect(() => {
               }
               completed={membershipComplete}
               disabled={membershipComplete}
+              howToVideos={[HOW_TO_VIDEOS[0]]}
+              onVideoClick={setSelectedVideo}
               onClick={() => {
                 if (!membershipComplete) {
                   window.location.href = "/member-registration";
@@ -492,7 +871,7 @@ useEffect(() => {
               title="Share With Bridge"
               description="Tell us the basic facts. Bridge AI helps prepare the submission, then you review and approve it."
               customContent={
-                <div className="mt-5 space-y-3">
+                <div className="mt-5 space-y-4 pb-6">
                   <SubmissionOption
                     icon={Plus}
                     title="New Submission"
@@ -514,6 +893,8 @@ useEffect(() => {
               }
               buttonText="Share Something"
               buttonClass="bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] text-white"
+              howToVideos={[HOW_TO_VIDEOS[1]]}
+              onVideoClick={setSelectedVideo}
               onClick={() => {
                 window.location.href = "/share-with-bridge";
               }}
@@ -567,6 +948,8 @@ useEffect(() => {
                     : "Become a Member to Unlock"
               }
               buttonClass="bg-gradient-to-r from-[#071A4A] to-[#2563EB] text-white"
+              howToVideos={[HOW_TO_VIDEOS[2], HOW_TO_VIDEOS[3]]}
+              onVideoClick={setSelectedVideo}
               onClick={() => {
                 if (canAccessMyBridge && bridgeMember?.myBridgeToken) {
                   window.location.href = `/recommendations/${bridgeMember.myBridgeToken}`;
@@ -631,6 +1014,324 @@ useEffect(() => {
           </motion.div>
         </div>
       </section>
+
+      {selectedVideo && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto bg-[#071A4A]/75 p-2 backdrop-blur-sm sm:p-4 md:p-6"
+          onClick={() => setSelectedVideo(null)}
+        >
+          <div
+            className="relative my-auto w-full max-w-[1100px] px-1 pb-6 sm:px-3 sm:pb-8"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {/* Screen glow */}
+            <div className="absolute inset-x-[8%] top-[12%] h-[75%] rounded-full bg-blue-500/20 blur-[80px]" />
+
+            {/* Animated remote */}
+            <motion.div
+              initial={{
+                opacity: 0,
+                x: 45,
+                y: 20,
+                rotate: 12,
+              }}
+              animate={{
+                opacity: [0, 1, 1, 0],
+                x: [70, 0, 0, 50],
+                y: [30, 0, 0, 25],
+                rotate: [18, -12, -12, 12],
+              }}
+              transition={{
+                duration: 1.35,
+                times: [0, 0.28, 0.68, 1],
+                ease: "easeInOut",
+              }}
+              className="absolute -bottom-16 right-8 z-30 hidden sm:block"
+            >
+              <div className="relative h-[138px] w-[52px] rounded-[18px] border border-white/10 bg-gradient-to-br from-[#303743] via-[#151A22] to-[#05070A] p-2 shadow-[0_20px_40px_rgba(0,0,0,0.55)]">
+                {/* Remote shine */}
+                <div className="pointer-events-none absolute inset-0 rounded-[18px] bg-gradient-to-br from-white/10 via-transparent to-transparent" />
+
+                {/* Power button */}
+                <motion.div
+                  initial={{ scale: 1 }}
+                  animate={{
+                    scale: [1, 0.72, 1],
+                  }}
+                  transition={{
+                    delay: 0.45,
+                    duration: 0.3,
+                    ease: "easeInOut",
+                  }}
+                  className="relative mx-auto flex h-8 w-8 items-center justify-center rounded-full border border-red-400/30 bg-red-500/15 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.16)]"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-4 w-4"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 2v10"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6.3 5.7a8 8 0 1 0 11.4 0"
+                    />
+                  </svg>
+                </motion.div>
+
+                {/* Remote buttons */}
+                <div className="mt-4 grid grid-cols-2 gap-2 px-1">
+                  <div className="h-3 rounded-full bg-white/10" />
+                  <div className="h-3 rounded-full bg-white/10" />
+                  <div className="h-3 rounded-full bg-white/10" />
+                  <div className="h-3 rounded-full bg-white/10" />
+                </div>
+
+                <div className="mx-auto mt-4 h-8 w-8 rounded-full border border-white/10 bg-white/[0.06]">
+                  <div className="mx-auto mt-[11px] h-2 w-2 rounded-full bg-white/20" />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* TV body — power-on animation */}
+            <motion.div
+              initial={{
+                opacity: 0,
+                scale: 0.94,
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+              }}
+              transition={{
+                delay: 0.62,
+                duration: 0.55,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="relative origin-center rounded-[18px] bg-gradient-to-br from-slate-700 via-[#151A23] to-black p-[4px] shadow-[0_25px_70px_rgba(0,0,0,0.55)] sm:rounded-[24px] sm:p-[6px] md:rounded-[30px] md:p-[7px] md:shadow-[0_45px_120px_rgba(0,0,0,0.65)]"
+            >
+              {/* Metallic edge */}
+              <div className="overflow-hidden rounded-[14px] border border-white/10 bg-[#080B10] p-[4px] sm:rounded-[20px] sm:p-[6px] md:rounded-[24px] md:p-[8px]">
+                {/* Top TV bar */}
+                <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-400">
+                      Bridge How-To
+                    </p>
+
+                    <h3 className="mt-0.5 text-sm font-bold text-white">
+                      {selectedVideo.title}
+                    </h3>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVideo(null)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white"
+                    aria-label="Close video"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="h-5 w-5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 6l12 12M18 6 6 18"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* TV screen */}
+                <div className="relative overflow-hidden rounded-[16px] bg-black shadow-inner">
+                  <div className="aspect-video w-full">
+                    <iframe
+                      src={getDrivePreviewUrl(selectedVideo.url)}
+                      title={selectedVideo.title}
+                      className="h-full w-full"
+                      allow="autoplay"
+                      allowFullScreen
+                    />
+                  </div>
+
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.05] via-transparent to-transparent" />
+                </div>
+
+                {/* TV bottom bezel */}
+                <div className="relative flex h-12 items-center justify-center">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 1.05, duration: 0.25 }}
+                    className="flex items-center justify-center rounded-full px-4 py-1.5  shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+                  >
+                    <img
+                      src={BRIDGE_LOGO}
+                      alt="BridgeAZ"
+                      className="h-6 w-auto object-contain"
+                    />
+                  </motion.div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* TV stand */}
+            <div className="absolute bottom-[13px] left-1/2 h-5 w-28 -translate-x-1/2 rounded-b-xl bg-gradient-to-b from-slate-700 to-slate-950" />
+
+            <div className="absolute bottom-2 left-1/2 h-2.5 w-48 -translate-x-1/2 rounded-full bg-gradient-to-b from-slate-700 to-slate-950 shadow-[0_8px_18px_rgba(0,0,0,0.45)]" />
+          </div>
+        </div>
+      )}
+
+      {installPrompt && !isAppInstalled && (
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="
+  fixed
+  bottom-4
+  left-4
+  right-4
+  z-[150]
+  mx-auto
+  max-w-[520px]
+  rounded-[22px]
+  border
+  border-[#2563EB]/30
+  bg-gradient-to-r
+  from-[#0A4BA8]
+  to-[#2563EB]
+  p-4
+  shadow-[0_20px_60px_rgba(37,99,235,0.35)]
+  backdrop-blur-xl
+  sm:left-auto
+  sm:right-6
+  sm:mx-0
+  sm:w-[430px]
+"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-[#071A4A]">
+              <img
+                src="/pwa-192x192.png"
+                alt="My Bridge"
+                className="h-9 w-9 rounded-[10px] object-cover"
+              />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-black text-white">
+                Install My Bridge
+              </p>
+
+              <p className="mt-0.5 text-[12px] font-medium leading-5 text-white/85">
+                Add Bridge to your phone or desktop for quick access.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleInstallApp}
+              className="
+  shrink-0
+  rounded-xl
+  bg-white
+  px-4
+  py-2.5
+  text-[12px]
+  font-black
+  text-[#0A4BA8]
+  shadow-md
+  transition
+  hover:bg-slate-100
+"
+            >
+              Install
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {user &&
+        !installPrompt &&
+        !notificationsEnabled &&
+        Notification.permission !== "denied" && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="
+        fixed
+        bottom-4
+        left-4
+        right-4
+        z-[150]
+        mx-auto
+        max-w-[520px]
+        rounded-[22px]
+        border
+        border-[#2563EB]/30
+        bg-gradient-to-r
+        from-[#071A4A]
+        to-[#0A4BA8]
+        p-4
+        shadow-[0_20px_60px_rgba(7,26,74,0.30)]
+        sm:left-auto
+        sm:right-6
+        sm:mx-0
+        sm:w-[450px]
+      "
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/15 text-2xl">
+                🔔
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-black text-white">
+                  Stay connected with My Bridge
+                </p>
+
+                <p className="mt-0.5 text-[12px] font-medium leading-5 text-white/80">
+                  Get alerts for recommendations, connections, and important
+                  Bridge updates.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleEnableNotifications}
+                disabled={notificationLoading}
+                className="
+            shrink-0
+            rounded-xl
+            bg-white
+            px-4
+            py-2.5
+            text-[12px]
+            font-black
+            text-[#0A4BA8]
+            shadow-md
+            transition
+            hover:bg-slate-100
+            disabled:cursor-not-allowed
+            disabled:opacity-60
+          "
+              >
+                {notificationLoading ? "Enabling..." : "Turn On"}
+              </button>
+            </div>
+          </motion.div>
+        )}
     </main>
   );
 }
@@ -639,12 +1340,24 @@ useEffect(() => {
    NAV
 ===================================================== */
 
-function NavItem({ icon: Icon, label, active = false, locked = false }) {
+function NavItem({
+  icon: Icon,
+  label,
+  active = false,
+  locked = false,
+  onClick,
+}) {
   return (
     <button
       type="button"
+      onClick={onClick}
+      disabled={locked}
       className={`relative flex h-[78px] items-center gap-2 text-sm font-bold transition ${
-        active ? "text-[#071A4A]" : "text-slate-500 hover:text-[#071A4A]"
+        locked
+          ? "cursor-not-allowed text-slate-300"
+          : active
+            ? "cursor-pointer text-[#071A4A]"
+            : "cursor-pointer text-slate-500 hover:text-[#071A4A]"
       }`}
     >
       {Icon && <Icon size={17} strokeWidth={2.5} />}
@@ -679,6 +1392,8 @@ function FeatureCard({
   disabled = false,
   lockedLabel = "Members Only",
   customContent = null,
+  howToVideos = [],
+  onVideoClick,
   onClick,
 }) {
   return (
@@ -779,6 +1494,61 @@ function FeatureCard({
 
         {!locked && !disabled && <ArrowRight size={18} />}
       </button>
+
+      {howToVideos.length > 0 && (
+        <div className="mt-4 hidden border-t border-slate-200/70 pt-4 sm:block">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Learn More: Watch These How-To&apos;s
+          </p>
+
+          <div className="space-y-2">
+            {howToVideos.map((video) => (
+              <button
+                key={video.title}
+                type="button"
+                onClick={() => {
+                  if (video.url && onVideoClick) {
+                    onVideoClick(video);
+                  }
+                }}
+                disabled={!video.url}
+                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                  video.url
+                    ? "bg-white/80 hover:bg-white hover:shadow-sm"
+                    : "cursor-default bg-slate-50/70"
+                }`}
+              >
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    video.url
+                      ? "bg-[#071A4A] text-white"
+                      : "bg-slate-200 text-slate-400"
+                  }`}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="ml-0.5 h-3.5 w-3.5 fill-current"
+                    aria-hidden="true"
+                  >
+                    <path d="M8 5.5v13l10-6.5-10-6.5Z" />
+                  </svg>
+                </div>
+
+                <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#071A4A]">
+                  {video.title}
+                </span>
+
+                {video.url && (
+                  <ArrowRight
+                    size={14}
+                    className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#2563EB]"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </motion.article>
   );
 }
@@ -789,27 +1559,19 @@ function FeatureCard({
 
 function SubmissionOption({ icon: Icon, title, subtitle }) {
   return (
-    <button
-      type="button"
-      className="group flex w-full items-center gap-3 rounded-2xl border border-violet-100 bg-white/70 p-3 text-left transition hover:border-violet-200 hover:bg-white hover:shadow-md"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-[#7C3AED] transition group-hover:bg-[#7C3AED] group-hover:text-white">
-        <Icon size={18} />
+    <div className="flex items-start gap-3 py-1">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[#7C3AED]">
+        <Icon size={15} strokeWidth={2.4} />
       </div>
 
       <div className="min-w-0">
-        <p className="text-sm font-black text-[#071A4A]">{title}</p>
+        <p className="text-sm font-bold leading-5 text-[#071A4A]">{title}</p>
 
         <p className="mt-0.5 text-[11px] font-medium leading-4 text-slate-400">
           {subtitle}
         </p>
       </div>
-
-      <ArrowRight
-        size={15}
-        className="ml-auto shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-violet-500"
-      />
-    </button>
+    </div>
   );
 }
 

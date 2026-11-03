@@ -25,6 +25,37 @@ import { useNavigate } from "react-router-dom";
 const BRIDGE_LOGO =
   "https://mcusercontent.com/2ead8cf9844eae73676cdedb6/images/5c553236-b34b-a985-35dd-24d9bba8f0a1.png";
 
+  const API_BASE =
+    import.meta.env.VITE_API_BASE ||
+    "https://bridgeaz-recommendations-server.vercel.app";
+
+  const saveLoginActivity = async (user) => {
+    try {
+      if (!user) return;
+
+      const idToken = await user.getIdToken();
+
+      const response = await fetch(`${API_BASE}/api/auth/login-activity`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error("Login activity save failed:", data);
+        return;
+      }
+
+      console.log("Login activity saved:", data);
+    } catch (error) {
+      console.error("Login activity error:", error);
+    }
+  };
+
 const LOGIN_PERKS = [
   {
     icon: Users,
@@ -70,19 +101,21 @@ export default function LoginPage() {
       try {
         setLoading("email");
 
-        const result = await signInWithEmailLink(
-          auth,
-          savedEmail,
-          window.location.href,
-        );
+const result = await signInWithEmailLink(
+  auth,
+  savedEmail,
+  window.location.href,
+);
 
-        window.localStorage.removeItem("bridgeEmailForSignIn");
+window.localStorage.removeItem("bridgeEmailForSignIn");
 
-        console.log("Logged in:", result.user);
+console.log("Logged in:", result.user);
 
-        toast.success("Welcome to BridgeAZ!");
+await saveLoginActivity(result.user);
 
-        navigate("/");
+toast.success("Welcome to BridgeAZ!");
+
+navigate("/");
       } catch (error) {
         console.error(error);
 
@@ -140,14 +173,15 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       setLoading("google");
+const result = await signInWithPopup(auth, googleProvider);
 
-      const result = await signInWithPopup(auth, googleProvider);
+console.log("Google user:", result.user);
 
-      console.log("Google user:", result.user);
+await saveLoginActivity(result.user);
 
-      toast.success("Welcome to BridgeAZ!");
+toast.success("Welcome to BridgeAZ!");
 
-      navigate("/");
+navigate("/");
     } catch (error) {
       console.error(error);
 

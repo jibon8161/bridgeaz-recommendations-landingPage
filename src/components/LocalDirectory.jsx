@@ -1443,15 +1443,41 @@ function MemberRow({
                 );
               })}
             </div>
-            <button
-              type="button"
-              onClick={handleFollow}
-              disabled={followSubmitting}
-              className="mt-4 rounded-full px-5 py-2.5 text-xs font-black text-white disabled:opacity-60"
-              style={{ backgroundColor: theme.primary }}
-            >
-              {followSubmitting ? "Following..." : "Confirm Follow"}
-            </button>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleFollow}
+                disabled={followSubmitting}
+                className="relative mt-4 w-full overflow-hidden rounded-full border px-8 py-2.5 text-xs font-black transition hover:shadow-sm disabled:opacity-60"
+                style={{
+                  backgroundColor: "#FFF7ED",
+                  borderColor: theme.primary,
+                  color: theme.secondary,
+                }}
+              >
+                <motion.span
+                  className="pointer-events-none absolute inset-y-0 w-24"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, transparent, rgba(255,255,255,0.85), transparent)",
+                    transform: "skewX(-20deg)",
+                  }}
+                  animate={{
+                    left: ["-35%", "120%"],
+                  }}
+                  transition={{
+                    duration: 1.8,
+                    repeat: Infinity,
+                    repeatDelay: 1.5,
+                    ease: "easeInOut",
+                  }}
+                />
+
+                <span className="relative z-10">
+                  {followSubmitting ? "Following..." : "Confirm Follow"}
+                </span>
+              </button>
+            </div>
           </div>
         )}
         {followError && (

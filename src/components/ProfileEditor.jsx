@@ -1584,7 +1584,14 @@ export default function ProfileEditor({
       {/* =====================================================
           PROFILE CONTROL
       ===================================================== */}
-
+      {menuOpen && (
+        <button
+          type="button"
+          aria-label="Close profile menu"
+          onClick={() => setMenuOpen(false)}
+          className="fixed inset-0 z-[8990] cursor-default bg-transparent"
+        />
+      )}
       <div
         ref={menuRef}
         className="

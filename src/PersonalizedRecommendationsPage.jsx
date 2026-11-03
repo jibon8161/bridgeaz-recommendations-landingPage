@@ -860,30 +860,30 @@ function PeopleRecommendationActions({
               : `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`,
           }}
         >
-   {recommendationInterestSubmitting
-  ? "Saving..."
-  : recommendationInterested
-    ? isHelpSomeone
-      ? "✓ I'm Open to Helping"
-      : "✓ I'm Interested"
-    : isHelpSomeone
-      ? "I'm Open to Helping"
-      : "I'm Interested"}
+          {recommendationInterestSubmitting
+            ? "Saving..."
+            : recommendationInterested
+              ? isHelpSomeone
+                ? "✓ I'm Open to Helping"
+                : "✓ I'm Interested"
+              : isHelpSomeone
+                ? "I'm Open to Helping"
+                : "I'm Interested"}
         </button>
 
         {recommendationInterested && (
-  <div className="col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center">
-    <p className="text-xs font-black text-emerald-700">
-      {isHelpSomeone
-        ? "✓ You’re open to helping"
-        : "✓ You’re interested"}
-    </p>
+          <div className="col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center">
+            <p className="text-xs font-black text-emerald-700">
+              {isHelpSomeone
+                ? "✓ You’re open to helping"
+                : "✓ You’re interested"}
+            </p>
 
-    <p className="mt-1 text-[11px] font-medium text-emerald-600">
-      Bridge will check whether they’re open to the connection too.
-    </p>
-  </div>
-)}
+            <p className="mt-1 text-[11px] font-medium text-emerald-600">
+              Bridge will check whether they’re open to the connection too.
+            </p>
+          </div>
+        )}
         <button
           type="button"
           onClick={handleHideRecommendation}
@@ -892,7 +892,7 @@ function PeopleRecommendationActions({
         >
           Not for Me / Hide
         </button>
-        
+
         <button
           type="button"
           disabled={followSubmitting || !viewerToken || !memberRecordId}
@@ -1069,16 +1069,34 @@ function PeopleRecommendationActions({
                     type="button"
                     onClick={handleFollow}
                     disabled={followSubmitting}
-                    className="flex-1 cursor-pointer rounded-2xl px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                    className="relative mt-4 w-full overflow-hidden rounded-full border px-8 py-2.5 text-xs font-black transition hover:shadow-sm disabled:opacity-60"
                     style={{
-                      background: `linear-gradient(
-                  135deg,
-                  ${theme.primary},
-                  ${theme.secondary}
-                )`,
+                      backgroundColor: "#FFF7ED",
+                      borderColor: theme.primary,
+                      color: theme.secondary,
                     }}
                   >
-                    {followSubmitting ? "Following..." : "Confirm Follow"}
+                    <motion.span
+                      className="pointer-events-none absolute inset-y-0 w-24"
+                      style={{
+                        background:
+                          "linear-gradient(90deg, transparent, rgba(255,255,255,0.85), transparent)",
+                        transform: "skewX(-20deg)",
+                      }}
+                      animate={{
+                        left: ["-35%", "120%"],
+                      }}
+                      transition={{
+                        duration: 1.8,
+                        repeat: Infinity,
+                        repeatDelay: 1.5,
+                        ease: "easeInOut",
+                      }}
+                    />
+
+                    <span className="relative z-10">
+                      {followSubmitting ? "Following..." : "Confirm Follow"}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -3797,8 +3815,12 @@ export default function PersonalizedRecommendationsPage() {
             </p> */}
 
             <h2 className="mt-3 text-4xl font-bold text-[#071A4A]">
-              Selected For You
+              Your Local Mix
             </h2>
+
+            <p className="mt-2 text-base font-semibold text-slate-500">
+              A little of everything, tailored to you
+            </p>
 
             <div className="mt-7 flex flex-wrap gap-5">
               {/* Local Events */}
@@ -4358,7 +4380,6 @@ export default function PersonalizedRecommendationsPage() {
                   </p>
                 )}
 
-                
                 <p className="mt-4 text-xs leading-5 text-slate-500">
                   Help Build a Better Connected Community
                 </p>

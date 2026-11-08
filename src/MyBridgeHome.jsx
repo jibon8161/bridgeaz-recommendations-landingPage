@@ -536,7 +536,7 @@ useEffect(() => {
               </button>
 
               {notificationOpen && (
-                <div className="absolute right-0 top-[52px] z-[110] w-[360px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(7,26,74,0.18)]">
+                <div className="fixed left-3 right-3 top-[90px] z-[110] max-h-[75dvh] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(7,26,74,0.18)] sm:absolute sm:left-auto sm:right-0 sm:top-[52px] sm:w-[360px] sm:max-h-none">
                   <div className="border-b border-slate-100 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>

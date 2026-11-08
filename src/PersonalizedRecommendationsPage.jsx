@@ -21,6 +21,11 @@ import PublicProfileView from "./components/PublicProfileView";
 const API_BASE =
   "https://bridgeaz-recommendations-server.vercel.app/api/recommendations";
 
+  // Local recommendation engine testing only.
+// Production profile API remains unchanged.
+const TEST_RECOMMENDATIONS_API =
+  "http://localhost:5000/api/test-content-keywords/0706670db6824cf9b2e341bf";
+
 const fallbackTheme = {
   primary: "#2C3E50",
   secondary: "#E67E22",
@@ -29,6 +34,51 @@ const fallbackTheme = {
   font: "Inter",
   mood: "professional",
 };
+
+const SHARE_TYPE_OPTIONS = [
+  "Event or Activity",
+  "Helpful Information or Resource",
+  "Opportunity",
+  "Promotion or Special",
+  "News or Announcement",
+  "Person, Business or Group Spotlight",
+  "Something Else",
+];
+
+function getItemShareType(item) {
+  const shareType = String(item?.shareType || "").trim();
+
+  if (SHARE_TYPE_OPTIONS.includes(shareType)) {
+    return shareType;
+  }
+
+  const submissionType = String(item?.submissionType || "")
+    .toLowerCase()
+    .trim();
+
+  // All records coming from the Events / Activities table
+  if (
+    String(item?.type || "")
+      .toLowerCase()
+      .trim() === "event"
+  ) {
+    return "Event or Activity";
+  }
+
+  // Legacy Bridge Submission fallback
+  if (submissionType === "an activity, event, class, or opportunity") {
+    return "Event or Activity";
+  }
+
+  if (
+    submissionType === "a resource, article, tip, or link" ||
+    submissionType === "a helpful document, template, or guide"
+  ) {
+    return "Helpful Information or Resource";
+  }
+
+  return "Something Else";
+}
 
 function getAnimatedNames(realName) {
   const shuffled = [...fakeNames];
@@ -263,7 +313,7 @@ function CustomRecommendationCarousel({ items, theme }) {
             <div
               key={index}
               data-carousel-card
-              className="w-full min-w-full max-w-full shrink-0 snap-start md:w-[calc((100%-28px)/2)] md:min-w-[calc((100%-28px)/2)] md:max-w-[calc((100%-28px)/2)] xl:w-[calc((100%-56px)/3)] xl:min-w-[calc((100%-56px)/3)] xl:max-w-[calc((100%-56px)/3)]"
+              className="w-[86%] min-w-[86%] max-w-[86%] shrink-0 snap-start md:w-[calc((100%-28px)/2)] md:min-w-[calc((100%-28px)/2)] md:max-w-[calc((100%-28px)/2)] xl:w-[calc((100%-56px)/3)] xl:min-w-[calc((100%-56px)/3)] xl:max-w-[calc((100%-56px)/3)]"
             >
               <RecommendationCard item={item} theme={theme} index={index} />
             </div>
@@ -923,7 +973,7 @@ function PeopleRecommendationActions({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed inset-0 z-[30000] flex items-center justify-center bg-[#071A4A]/70 p-4 backdrop-blur-md"
+            className="fixed inset-0 z-30000 flex items-center justify-center bg-[#071A4A]/70 p-4 backdrop-blur-md"
             onClick={() => {
               if (!followSubmitting) {
                 setShowFollowOptions(false);
@@ -1117,7 +1167,7 @@ function PeopleRecommendationActions({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed inset-0 z-[20000] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-20000 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
             onClick={() => {
               if (!connectionSubmitting) {
                 setShowConnectModal(false);
@@ -1302,8 +1352,10 @@ export default function PersonalizedRecommendationsPage() {
   const [showIntro, setShowIntro] = useState(true);
   const [showAllFuture, setShowAllFuture] = useState(true);
   const [daysFilter, setDaysFilter] = useState(14);
-  const [activeSection, setActiveSection] = useState("events");
-  const [communityFilter, setCommunityFilter] = useState("all");
+
+  const [shareTypeFilter, setShareTypeFilter] = useState("Event or Activity");
+  // Search recommendations by keyword
+  const [recommendationSearch, setRecommendationSearch] = useState("");
   const [friendEmail, setFriendEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
   const [showInterestModal, setShowInterestModal] = useState(false);
@@ -1331,7 +1383,7 @@ export default function PersonalizedRecommendationsPage() {
   const [connectionOutcomesDue, setConnectionOutcomesDue] = useState([]);
   const [connectionOutcomesDueLoading, setConnectionOutcomesDueLoading] =
     useState(false);
-  
+
   const [connectionOutcomeSubmittingId, setConnectionOutcomeSubmittingId] =
     useState("");
 
@@ -1426,70 +1478,129 @@ export default function PersonalizedRecommendationsPage() {
 
         const result = JSON.parse(text);
         console.log("RECOMMENDATION API RESULT:", result);
-  if (result?.success === true) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    const keepCurrentAndFutureCommunityItems = (item) => {
-      const submissionType = String(item?.submissionType || "")
-        .toLowerCase()
-        .trim();
+        // LOCAL TEST ONLY — Do not deploy to production.
+        let testResult = null;
 
-      const isActivity =
-        submissionType === "an activity, event, class, or opportunity";
+        if (token === "0706670db6824cf9b2e341bf") {
+          try {
+            const testResponse = await fetch(TEST_RECOMMENDATIONS_API);
 
-      // Resources and Documents should always remain.
-      if (!isActivity) {
-        return true;
-      }
+            if (!testResponse.ok) {
+              throw new Error(`Test API error: ${testResponse.status}`);
+            }
 
-      // Activities without a date should not be shown.
-      if (!item?.rawDate && !item?.startDateTime) {
-        return false;
-      }
+            const testData = await testResponse.json();
 
-      const rawDate = item.rawDate || item.startDateTime;
-      const itemDate = new Date(rawDate);
+            if (testData.success && testData.reactApiResponsePreview) {
+              testResult = testData.reactApiResponsePreview;
 
-      if (Number.isNaN(itemDate.getTime())) {
-        return false;
-      }
+              console.log("NEW FUSE RECOMMENDATIONS:", testResult);
+            }
+          } catch (error) {
+            console.error("LOCAL TEST API ERROR:", error);
+          }
+        }
 
-      return itemDate >= today;
-    };
+        if (!active) return;
+        if (result?.success === true) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
-    const cleanedResult = {
-      ...result,
+          const keepCurrentAndFutureCommunityItems = (item) => {
+            const submissionType = String(item?.submissionType || "")
+              .toLowerCase()
+              .trim();
 
-      recommendations: {
-        ...result.recommendations,
+            const isActivity =
+              submissionType === "an activity, event, class, or opportunity";
 
-        next14DaysItems: Array.isArray(result?.recommendations?.next14DaysItems)
-          ? result.recommendations.next14DaysItems.filter(
-              keepCurrentAndFutureCommunityItems,
-            )
-          : [],
+            // Resources and Documents should always remain.
+            if (!isActivity) {
+              return true;
+            }
 
-        allFutureItems: Array.isArray(result?.recommendations?.allFutureItems)
-          ? result.recommendations.allFutureItems.filter(
-              keepCurrentAndFutureCommunityItems,
-            )
-          : [],
-      },
+            // Activities without a date should not be shown.
+            if (!item?.rawDate && !item?.startDateTime) {
+              return false;
+            }
 
-      followedSubmissions: Array.isArray(result?.followedSubmissions)
-        ? result.followedSubmissions.filter((item) =>
-            keepCurrentAndFutureCommunityItems({
-              ...item,
-              rawDate: item.startDateTime || "",
-            }),
-          )
-        : [],
-    };
+            const rawDate = item.rawDate || item.startDateTime;
+            const itemDate = new Date(rawDate);
 
-    sessionStorage.setItem(cacheKey, JSON.stringify(cleanedResult));
-    setRawData(cleanedResult);
-  }
+            if (Number.isNaN(itemDate.getTime())) {
+              return false;
+            }
+
+            return itemDate >= today;
+          };
+
+          // Use new Fuse.js recommendations only for our local test member.
+          // Keep all existing profile information from the production API.
+          // STEP 31AG — Use Fuse.js recommendations for our local test member.
+          // Keep existing production data for everyone else.
+          const recommendationSource =
+            testResult?.success === true
+              ? {
+                  ...result,
+                  recommendations: testResult.recommendations,
+                  followedSubmissions: testResult.followedSubmissions,
+                }
+              : result;
+
+          const cleanedResult = {
+            ...recommendationSource,
+
+            // New Fuse.js recommendations for the test member.
+            // Existing recommendations remain unchanged for other members.
+            recommendations:
+              testResult?.success === true
+                ? recommendationSource.recommendations
+                : {
+                    ...result.recommendations,
+
+                    next14DaysItems: Array.isArray(
+                      result?.recommendations?.next14DaysItems,
+                    )
+                      ? result.recommendations.next14DaysItems.filter(
+                          keepCurrentAndFutureCommunityItems,
+                        )
+                      : [],
+
+                    allFutureItems: Array.isArray(
+                      result?.recommendations?.allFutureItems,
+                    )
+                      ? result.recommendations.allFutureItems.filter(
+                          keepCurrentAndFutureCommunityItems,
+                        )
+                      : [],
+                  },
+
+            // Following content should not be restricted by date
+            // when using our new Fuse.js recommendation engine.
+            followedSubmissions:
+              testResult?.success === true
+                ? recommendationSource.followedSubmissions
+                : Array.isArray(result?.followedSubmissions)
+                  ? result.followedSubmissions.filter((item) =>
+                      keepCurrentAndFutureCommunityItems({
+                        ...item,
+                        rawDate: item.startDateTime || "",
+                      }),
+                    )
+                  : [],
+          };
+
+          sessionStorage.setItem(cacheKey, JSON.stringify(cleanedResult));
+          setRawData(cleanedResult);
+
+          // Do not save test recommendations into the production cache.
+          if (testResult?.success !== true) {
+            sessionStorage.setItem(cacheKey, JSON.stringify(cleanedResult));
+          }
+
+          setRawData(cleanedResult);
+        }
       } catch (err) {
         console.error("API ERROR:", err);
       } finally {
@@ -1612,52 +1723,50 @@ export default function PersonalizedRecommendationsPage() {
     }
 
     async function fetchConnectionOutcomesDue() {
-  try {
-    setConnectionOutcomesDueLoading(true);
+      try {
+        setConnectionOutcomesDueLoading(true);
 
-    const response = await fetch(
-      `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
-        token,
-      )}/connection-outcomes-due`,
-      {
-        method: "GET",
-        cache: "no-store",
-      },
-    );
+        const response = await fetch(
+          `https://bridgeaz-recommendations-server.vercel.app/api/profile/${encodeURIComponent(
+            token,
+          )}/connection-outcomes-due`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
 
-    const result = await response.json();
+        const result = await response.json();
 
-    if (!active) return;
+        if (!active) return;
 
-    if (!response.ok || result?.success !== true) {
-      throw new Error(
-        result?.error ||
-          result?.message ||
-          "Could not load connection follow-ups.",
-      );
+        if (!response.ok || result?.success !== true) {
+          throw new Error(
+            result?.error ||
+              result?.message ||
+              "Could not load connection follow-ups.",
+          );
+        }
+
+        const connections = Array.isArray(result?.connections)
+          ? result.connections
+          : [];
+
+        setConnectionOutcomesDue(connections);
+
+        console.log("CONNECTION OUTCOMES DUE:", connections);
+      } catch (error) {
+        console.error("CONNECTION OUTCOMES DUE ERROR:", error);
+
+        if (active) {
+          setConnectionOutcomesDue([]);
+        }
+      } finally {
+        if (active) {
+          setConnectionOutcomesDueLoading(false);
+        }
+      }
     }
-
-    const connections = Array.isArray(result?.connections)
-      ? result.connections
-      : [];
-
-    setConnectionOutcomesDue(connections);
-
-    console.log("CONNECTION OUTCOMES DUE:", connections);
-  } catch (error) {
-    console.error("CONNECTION OUTCOMES DUE ERROR:", error);
-
-    if (active) {
-      setConnectionOutcomesDue([]);
-    }
-  } finally {
-    if (active) {
-      setConnectionOutcomesDueLoading(false);
-    }
-  }
-    }
-    
-
 
     fetchMutualPeopleConnections();
     fetchConnectionOutcomesDue();
@@ -1757,8 +1866,6 @@ export default function PersonalizedRecommendationsPage() {
       setPeopleConnectionInvitationSubmittingId("");
     }
   }
-
-
 
   async function handlePeopleInvitationDecline(connectionRecordId) {
     if (!token) {
@@ -2053,6 +2160,44 @@ export default function PersonalizedRecommendationsPage() {
   }
 
   if (!profile) return <ErrorState />;
+  const backgroundEffect = profile.theme.backgroundEffect || "gradient-bloom";
+
+  const useGradientBloom = backgroundEffect === "gradient-bloom";
+
+  const useSoftOrbs = backgroundEffect === "soft-orbs";
+
+  const useSpotlight = backgroundEffect === "spotlight";
+  const useFloatingChips = backgroundEffect === "floating-chips";
+  const visualEnergy = profile.theme.visualEnergy || "medium";
+
+  const energyMultiplier =
+    visualEnergy === "high" ? 1.35 : visualEnergy === "low" ? 0.65 : 1;
+
+  const mood = String(profile.theme.mood || "professional").toLowerCase();
+
+  const heroMoodShadow =
+    mood.includes("bold") ||
+    mood.includes("energetic") ||
+    mood.includes("vibrant")
+      ? `0 45px 140px ${profile.theme.primary}24,
+       0 20px 60px ${profile.theme.secondary}18,
+       inset 0 1px 0 rgba(255,255,255,0.8)`
+      : mood.includes("calm") ||
+          mood.includes("soft") ||
+          mood.includes("peaceful")
+        ? `0 30px 90px rgba(15,23,42,0.08),
+         inset 0 1px 0 rgba(255,255,255,0.7)`
+        : `0 40px 120px rgba(15,23,42,0.12),
+         inset 0 1px 0 rgba(255,255,255,0.7)`;
+
+  const animationStyle = profile.theme.animationStyle || "smooth";
+
+  const animationEase =
+    animationStyle === "dynamic"
+      ? "easeOut"
+      : animationStyle === "gentle"
+        ? "linear"
+        : "easeInOut";
 
   const next14DaysItems = rawData?.recommendations?.next14DaysItems || [];
 
@@ -2062,27 +2207,45 @@ export default function PersonalizedRecommendationsPage() {
     ? rawData.followedSubmissions
     : [];
 
-  const followedCommunityItems = followedSubmissions.map((item) => ({
-    type: "submission",
-    title: item.title || "",
-    details: item.summary || item.shortDescription || "",
-    date: item.startDateTime
-      ? new Date(item.startDateTime).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })
-      : "",
-    rawDate: item.startDateTime || "",
-    location: item.eventLocation || "",
-    link: item.link || "",
-    imageUrl: "",
-    submissionType: item.submissionType || "",
-    followedMemberName: item.followedMemberName || "",
-    isFollowedSubmission: true,
+  const followedCommunityItems = followedSubmissions.map((item) => {
+    const normalizedItem = {
+      type: "submission",
+      title: item.title || "",
+      details: item.summary || item.shortDescription || "",
+      date: item.startDateTime
+        ? new Date(item.startDateTime).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+        : "",
+      rawDate: item.startDateTime || "",
+      location: item.eventLocation || "",
+      link: item.link || "",
+      imageUrl: item.imageUrl || "",
+      submissionType: item.submissionType || "",
+      shareType: item.shareType || "",
+      followedMemberName: item.followedMemberName || "",
+      isFollowedSubmission: true,
+    };
+
+    return {
+      ...normalizedItem,
+      shareType: getItemShareType(normalizedItem),
+    };
+  });
+
+  const selectedBaseItems = (
+    showAllFuture ? allFutureItems : next14DaysItems
+  ).map((item) => ({
+    ...item,
+    shareType: getItemShareType(item),
   }));
 
-  const selectedBaseItems = showAllFuture ? allFutureItems : next14DaysItems;
+  const normalizedAllFutureItems = allFutureItems.map((item) => ({
+    ...item,
+    shareType: getItemShareType(item),
+  }));
 
   const todayBase = new Date();
 
@@ -2107,69 +2270,40 @@ export default function PersonalizedRecommendationsPage() {
     return itemUTC >= todayUTC && itemUTC <= endUTC;
   });
 
-  const selectedForYouItems = filteredItems.filter((item) => {
-    return item.type?.toLowerCase().trim() === "event";
-  });
+  const localMixBaseItems =
+    shareTypeFilter === "Event or Activity"
+      ? filteredItems
+      : normalizedAllFutureItems;
 
-  const communityBaseItems =
-    activeSection === "hub" &&
-    communityFilter !== "all" &&
-    communityFilter !== "An activity, event, class, or opportunity"
-      ? allFutureItems
-      : filteredItems;
-
-  const filteredFollowedCommunityItems = followedCommunityItems.filter(
-    (item) => {
-      if (showAllFuture) return true;
-      if (!item.rawDate) return false;
-
-      const itemUTC = getUTCDateOnly(item.rawDate);
-
-      return itemUTC >= todayUTC && itemUTC <= endUTC;
-    },
-  );
-
-  const followedCommunityBaseItems =
-    activeSection === "hub" &&
-    communityFilter !== "all" &&
-    communityFilter !== "An activity, event, class, or opportunity"
+  const localMixItems =
+    shareTypeFilter === "Following"
       ? followedCommunityItems
-      : filteredFollowedCommunityItems;
+      : localMixBaseItems.filter((item) => {
+          return getItemShareType(item) === shareTypeFilter;
+        });
 
-  const allCommunityItems = [
-    ...communityBaseItems.filter((item) => {
-      return item.type?.toLowerCase().trim() === "submission";
-    }),
-    ...followedCommunityBaseItems,
-  ];
+  // STEP 31AQ — Filter recommendations by search text
+  const normalizedSearch = recommendationSearch.trim().toLowerCase();
 
-  const allFutureCommunityItems = [
-    ...allFutureItems.filter((item) => {
-      return item.type?.toLowerCase().trim() === "submission";
-    }),
-    ...followedCommunityItems,
-  ];
+  const activeItems = localMixItems.filter((item) => {
+    // Show all items when the search box is empty.
+    if (!normalizedSearch) return true;
 
-  const communityCategories = [
-    // "all",
-    "An activity, event, class, or opportunity",
-    "A resource, article, tip, or link",
-    "A helpful Document, template, or guide",
-  ];
+    const searchableText = [
+      item.title,
+      item.details,
+      item.location,
+      item.submissionType,
+      item.followedMemberName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
 
-  const communityHubItems = allCommunityItems.filter((item) => {
-    if (communityFilter === "all") return true;
-
-    return item.submissionType?.toLowerCase() === communityFilter.toLowerCase();
+    return searchableText.includes(normalizedSearch);
   });
 
-  const activeItems =
-    activeSection === "events" ? selectedForYouItems : communityHubItems;
-
-  const shouldShowDateFilter =
-    activeSection === "events" ||
-    (activeSection === "hub" &&
-      communityFilter === "An activity, event, class, or opportunity");
+  const shouldShowDateFilter = shareTypeFilter === "Event or Activity";
 
   async function handleInviteFriend(e) {
     e.preventDefault();
@@ -2276,7 +2410,7 @@ export default function PersonalizedRecommendationsPage() {
                   transition={{
                     delay: 1.8 + index * 1.1,
                     duration: index === 3 ? 1.8 : 1.1,
-                    ease: "easeInOut",
+                    ease: animationEase,
                   }}
                   className="absolute inset-0 flex items-center justify-center text-5xl font-black tracking-tight md:text-7xl"
                 >
@@ -2301,7 +2435,7 @@ export default function PersonalizedRecommendationsPage() {
                 transition={{
                   repeat: Infinity,
                   duration: 2.4,
-                  ease: "easeInOut",
+                  ease: animationEase,
                 }}
                 className="h-full w-1/2 rounded-full bg-white"
               />
@@ -2332,75 +2466,180 @@ export default function PersonalizedRecommendationsPage() {
           }}
         />
 
-        {/* luxury moving light cloud */}
-        <motion.div
-          animate={{
-            x: ["-12%", "8%", "-12%"],
-            y: [0, -28, 0],
-            scale: [1, 1.08, 1],
-          }}
-          transition={{
-            repeat: Infinity,
-            duration: 24,
-            ease: "easeInOut",
-          }}
-          className="absolute left-[-8%] top-[10%] h-130 w-190 rounded-full"
-          style={{
-            background: `
-        radial-gradient(circle at 35% 40%, rgba(255,255,255,0.95), transparent 38%),
-        radial-gradient(circle at 60% 45%, ${profile.theme.secondary}20, transparent 42%),
-        radial-gradient(circle at 45% 70%, rgba(255,255,255,0.8), transparent 48%)
-      `,
-            filter: "blur(55px)",
-            opacity: 0.85,
-          }}
-        />
+        {useGradientBloom && (
+          <>
+            {/* luxury moving light cloud */}
+            <motion.div
+              animate={{
+                x: ["-12%", "8%", "-12%"],
+                y: [0, -28, 0],
+                scale: [1, 1.08, 1],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 24 / energyMultiplier,
+                ease: animationEase,
+              }}
+              className="absolute left-[-8%] top-[10%] h-130 w-190 rounded-full"
+              style={{
+                background: `
+            radial-gradient(circle at 35% 40%, rgba(255,255,255,0.95), transparent 38%),
+            radial-gradient(circle at 60% 45%, ${profile.theme.secondary}20, transparent 42%),
+            radial-gradient(circle at 45% 70%, rgba(255,255,255,0.8), transparent 48%)
+          `,
+                filter: "blur(55px)",
+                opacity: 0.85,
+              }}
+            />
 
-        {/* right atmosphere */}
-        <motion.div
-          animate={{
-            x: ["8%", "-8%", "8%"],
-            y: [0, 35, 0],
-            scale: [1, 1.12, 1],
-          }}
-          transition={{
-            repeat: Infinity,
-            duration: 28,
-            ease: "easeInOut",
-          }}
-          className="absolute right-[-12%] top-[18%] h-155 w-195 rounded-full"
-          style={{
-            background: `
-        radial-gradient(circle at 40% 40%, ${profile.theme.primary}20, transparent 38%),
-        radial-gradient(circle at 65% 55%, rgba(255,255,255,0.85), transparent 44%),
-        radial-gradient(circle at 35% 70%, ${profile.theme.secondary}16, transparent 50%)
-      `,
-            filter: "blur(70px)",
-            opacity: 0.75,
-          }}
-        />
+            {/* right atmosphere */}
+            <motion.div
+              animate={{
+                x: ["8%", "-8%", "8%"],
+                y: [0, 35, 0],
+                scale: [1, 1.12, 1],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 28 / energyMultiplier,
+                ease: animationEase,
+              }}
+              className="absolute right-[-12%] top-[18%] h-155 w-195 rounded-full"
+              style={{
+                background: `
+            radial-gradient(circle at 40% 40%, ${profile.theme.primary}20, transparent 38%),
+            radial-gradient(circle at 65% 55%, rgba(255,255,255,0.85), transparent 44%),
+            radial-gradient(circle at 35% 70%, ${profile.theme.secondary}16, transparent 50%)
+          `,
+                filter: "blur(70px)",
+                opacity: 0.75,
+              }}
+            />
 
-        {/* lower cloud bed */}
-        <motion.div
-          animate={{
-            y: [0, -18, 0],
-            opacity: [0.65, 0.9, 0.65],
-          }}
-          transition={{
-            repeat: Infinity,
-            duration: 18,
-            ease: "easeInOut",
-          }}
-          className="absolute -bottom-45 left-[-10%] h-105 w-[120%]"
-          style={{
-            background: `
-        radial-gradient(ellipse at 20% 40%, rgba(255,255,255,0.95), transparent 45%),
-        radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.9), transparent 48%),
-        radial-gradient(ellipse at 80% 45%, rgba(255,255,255,0.95), transparent 45%)
+            {/* lower cloud bed */}
+            <motion.div
+              animate={{
+                y: [0, -18, 0],
+                opacity: [0.65, 0.9, 0.65],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 18 / energyMultiplier,
+                ease: animationEase,
+              }}
+              className="absolute -bottom-45 left-[-10%] h-105 w-[120%]"
+              style={{
+                background: `
+            radial-gradient(ellipse at 20% 40%, rgba(255,255,255,0.95), transparent 45%),
+            radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.9), transparent 48%),
+            radial-gradient(ellipse at 80% 45%, rgba(255,255,255,0.95), transparent 45%)
+          `,
+                filter: "blur(45px)",
+              }}
+            />
+          </>
+        )}
+
+        {useSoftOrbs && (
+          <>
+            <motion.div
+              animate={{
+                x: [0, 45, 0],
+                y: [0, -30, 0],
+                scale: [1, 1.08, 1],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 22 / energyMultiplier,
+                ease: "easeInOut",
+              }}
+              className="absolute left-[8%] top-[14%] h-72 w-72 rounded-full"
+              style={{
+                background: profile.theme.primary,
+                filter: "blur(90px)",
+                opacity: 0.1,
+              }}
+            />
+
+            <motion.div
+              animate={{
+                x: [0, -40, 0],
+                y: [0, 35, 0],
+                scale: [1, 1.12, 1],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 26 / energyMultiplier,
+                ease: "easeInOut",
+              }}
+              className="absolute right-[10%] top-[24%] h-80 w-80 rounded-full"
+              style={{
+                background: profile.theme.secondary,
+                filter: "blur(100px)",
+                opacity: 0.12,
+              }}
+            />
+          </>
+        )}
+
+        {useFloatingChips && (
+          <>
+            {(profile.theme.personalityChips || [])
+              .slice(0, 5)
+              .map((chip, index) => (
+                <motion.div
+                  key={`floating-chip-${chip}`}
+                  animate={{
+                    y: [0, -18 - index * 2, 0],
+                    x: [0, index % 2 === 0 ? 12 : -12, 0],
+                    opacity: [0.12, 0.22, 0.12],
+                  }}
+                  transition={{
+                    repeat: Infinity,
+                    duration: (10 + index * 2) / energyMultiplier,
+                    ease: "easeInOut",
+                    delay: index * 0.6,
+                  }}
+                  className="absolute rounded-full border border-white/50 bg-white/50 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] backdrop-blur-md"
+                  style={{
+                    left: `${10 + index * 18}%`,
+                    top: `${14 + (index % 3) * 16}%`,
+                    color: profile.theme.primary,
+                    boxShadow: `0 10px 35px ${profile.theme.primary}12`,
+                  }}
+                >
+                  {chip}
+                </motion.div>
+              ))}
+          </>
+        )}
+
+        {useSpotlight && (
+          <motion.div
+            animate={{
+              x: ["-8%", "8%", "-8%"],
+              y: [0, 20, 0],
+              opacity: [0.16, 0.24, 0.16],
+            }}
+            transition={{
+              repeat: Infinity,
+              duration: 20 / energyMultiplier,
+              ease: "easeInOut",
+            }}
+            className="absolute left-1/2 top-[8%] h-[70vh] w-[55vw] -translate-x-1/2 rounded-full"
+            style={{
+              background: `
+        radial-gradient(
+          ellipse at center,
+          ${profile.theme.secondary}35 0%,
+          ${profile.theme.primary}14 35%,
+          transparent 72%
+        )
       `,
-            filter: "blur(45px)",
-          }}
-        />
+              filter: "blur(70px)",
+            }}
+          />
+        )}
       </div>
 
       {/* top bar */}
@@ -2497,10 +2736,7 @@ export default function PersonalizedRecommendationsPage() {
             <div
               className="relative overflow-hidden rounded-[40px] border border-white/40 bg-white/75 p-8 backdrop-blur-3xl md:p-14"
               style={{
-                boxShadow: `
-            0 40px 120px rgba(15,23,42,0.12),
-            inset 0 1px 0 rgba(255,255,255,0.7)
-          `,
+                boxShadow: heroMoodShadow,
               }}
             >
               {/* floating light */}
@@ -2512,7 +2748,7 @@ export default function PersonalizedRecommendationsPage() {
                 transition={{
                   repeat: Infinity,
                   duration: 10,
-                  ease: "easeInOut",
+                  ease: animationEase,
                 }}
                 className="absolute top-0 h-full w-70 rotate-12"
                 style={{
@@ -2668,6 +2904,11 @@ export default function PersonalizedRecommendationsPage() {
                   />
                   <span>{profile.themeName}</span>
                 </div>
+                {profile.theme.revealSequence && (
+                  <p className="mt-2 text-sm font-semibold text-slate-500">
+                    {profile.theme.revealSequence}
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
@@ -3147,7 +3388,7 @@ export default function PersonalizedRecommendationsPage() {
                 transition={{
                   repeat: Infinity,
                   duration: 2,
-                  ease: "easeInOut",
+                  ease: animationEase,
                 }}
                 className="h-2.5 w-2.5 rounded-full"
                 style={{
@@ -3182,7 +3423,7 @@ export default function PersonalizedRecommendationsPage() {
                     transition={{
                       repeat: Infinity,
                       duration: 1.5,
-                      ease: "easeInOut",
+                      ease: animationEase,
                     }}
                     className="flex items-center gap-1 text-sm font-black"
                     style={{
@@ -3264,7 +3505,7 @@ export default function PersonalizedRecommendationsPage() {
           pb-10
           touch-pan-x
           [-ms-overflow-style:none]
-          [scrollbar-width:none]
+          scrollbar-none
           [&::-webkit-scrollbar]:hidden
 
           md:grid
@@ -3315,7 +3556,7 @@ export default function PersonalizedRecommendationsPage() {
                 group
                 relative
                 w-[84vw]
-                max-w-[390px]
+                max-w-97.5
                 shrink-0
                 snap-start
 
@@ -3414,7 +3655,7 @@ export default function PersonalizedRecommendationsPage() {
                             transition={{
                               repeat: Infinity,
                               duration: 2.5,
-                              ease: "easeInOut",
+                              ease: animationEase,
                             }}
                             className="shrink-0 rounded-xl px-3 py-2 text-center"
                             style={{
@@ -3553,8 +3794,8 @@ export default function PersonalizedRecommendationsPage() {
 
                   ${
                     isBookOpen
-                      ? "[transform:rotateY(-88deg)] md:[transform:rotateY(0deg)] md:group-hover:[transform:rotateY(-88deg)]"
-                      : "[transform:rotateY(0deg)] md:group-hover:[transform:rotateY(-88deg)]"
+                      ? "transform-[rotateY(-88deg)] md:transform-[rotateY(0deg)] md:group-hover:transform-[rotateY(-88deg)]"
+                      : "transform-[rotateY(0deg)] md:group-hover:transform-[rotateY(-88deg)]"
                   }
                 `}
                       style={{
@@ -3579,7 +3820,7 @@ export default function PersonalizedRecommendationsPage() {
                         transition={{
                           repeat: Infinity,
                           duration: 4,
-                          ease: "easeInOut",
+                          ease: animationEase,
                         }}
                         className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full blur-3xl"
                         style={{
@@ -3606,7 +3847,7 @@ export default function PersonalizedRecommendationsPage() {
                         transition={{
                           repeat: Infinity,
                           duration: 3,
-                          ease: "easeInOut",
+                          ease: animationEase,
                         }}
                         className="relative z-10 h-1.5 rounded-full"
                         style={{
@@ -3636,7 +3877,7 @@ export default function PersonalizedRecommendationsPage() {
                           transition={{
                             repeat: Infinity,
                             duration: 2.8,
-                            ease: "easeInOut",
+                            ease: animationEase,
                           }}
                           className="mt-3 origin-left text-6xl font-black leading-none tracking-[-0.07em]"
                         >
@@ -3701,7 +3942,7 @@ export default function PersonalizedRecommendationsPage() {
                           )}
 
                           <div className="min-w-0">
-                            <h3 className="truncate text-xl font-black tracking-[-0.025em] text-white">
+                            <h3 className="truncate text-xl font-black tracking-tight text-white">
                               {person.fullName || "Bridge Member"}
                             </h3>
 
@@ -3730,7 +3971,7 @@ export default function PersonalizedRecommendationsPage() {
                             transition={{
                               repeat: Infinity,
                               duration: 1.4,
-                              ease: "easeInOut",
+                              ease: animationEase,
                             }}
                             className="text-lg"
                           >
@@ -3822,160 +4063,95 @@ export default function PersonalizedRecommendationsPage() {
               A little of everything, tailored to you
             </p>
 
-            <div className="mt-7 flex flex-wrap gap-5">
-              {/* Local Events */}
-              <button
-                type="button"
-                onClick={() => setActiveSection("events")}
-                className="group relative inline-block p-2 transition-transform duration-200 hover:-translate-y-1"
-              >
-                <span
-                  className="relative z-10 block overflow-hidden rounded-lg border-2 px-7 py-3 text-lg font-black leading-tight transition-colors duration-300 ease-out group-hover:text-white group-hover:shadow-xl"
-                  style={{
-                    borderColor:
-                      activeSection === "events"
-                        ? profile.theme.primary
-                        : "#071A4A",
-                    color:
-                      activeSection === "events"
-                        ? profile.theme.primary
-                        : "#071A4A",
-                  }}
-                >
-                  {/* White background */}
-                  <span className="absolute inset-0 h-full w-full rounded-lg bg-white" />
+            <div className="mt-7 flex flex-wrap gap-3">
+              {SHARE_TYPE_OPTIONS.map((type) => {
+                const isActive = shareTypeFilter === type;
 
-                  {/* Animated gradient hover */}
-                  <span
-                    className="absolute left-1/2 top-1/2 h-80 w-80 translate-x-[140%] -translate-y-1/2 -rotate-90 rounded-full transition-all duration-500 ease-out group-hover:-translate-x-1/2 group-hover:-rotate-180"
-                    style={{
-                      background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
-                    }}
-                  />
-
-                  <span className="relative z-10">Local Events</span>
-                </span>
-
-                {/* Selected indicator */}
-                {activeSection === "events" && (
-                  <span
-                    className="absolute bottom-0 right-0 h-12 w-full -mb-1 -mr-1 rounded-lg transition-all duration-200 ease-linear group-hover:mb-0 group-hover:mr-0"
-                    style={{
-                      background: profile.theme.primary,
-                    }}
-                  />
-                )}
-              </button>
-
-              {/* Community Hub */}
-              <button
-                type="button"
-                onClick={() => setActiveSection("hub")}
-                className="group relative inline-block p-2 transition-transform duration-200 hover:-translate-y-1"
-              >
-                <span
-                  className="relative z-10 block overflow-hidden rounded-lg border-2 px-7 py-3 text-lg font-black leading-tight transition-colors duration-300 ease-out group-hover:text-white group-hover:shadow-xl"
-                  style={{
-                    borderColor:
-                      activeSection === "hub"
-                        ? profile.theme.primary
-                        : "#071A4A",
-                    color:
-                      activeSection === "hub"
-                        ? profile.theme.primary
-                        : "#071A4A",
-                  }}
-                >
-                  {/* White background */}
-                  <span className="absolute inset-0 h-full w-full rounded-lg bg-white" />
-
-                  {/* Animated gradient hover */}
-                  <span
-                    className="absolute left-1/2 top-1/2 h-80 w-80 translate-x-[140%] -translate-y-1/2 -rotate-90 rounded-full transition-all duration-500 ease-out group-hover:-translate-x-1/2 group-hover:-rotate-180"
-                    style={{
-                      background: `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`,
-                    }}
-                  />
-
-                  <span className="relative z-10">Community Hub</span>
-                </span>
-
-                {/* Selected indicator */}
-                {activeSection === "hub" && (
-                  <span
-                    className="absolute bottom-0 right-0 h-12 w-full -mb-1 -mr-1 rounded-lg transition-all duration-200 ease-linear group-hover:mb-0 group-hover:mr-0"
-                    style={{
-                      background: profile.theme.primary,
-                    }}
-                  />
-                )}
-              </button>
-            </div>
-
-            {activeSection === "hub" && (
-              <div className="mt-6 flex flex-wrap gap-3">
-                {communityCategories.map((type) => (
+                return (
                   <button
                     key={type}
                     type="button"
-                    onClick={() => setCommunityFilter(type)}
-                    className="rounded-full border px-4 py-2 text-sm font-bold transition hover:scale-105"
+                    onClick={() => setShareTypeFilter(type)}
+                    className="rounded-full border px-5 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:shadow-md"
                     style={{
-                      backgroundColor:
-                        communityFilter === type
-                          ? profile.theme.primary
-                          : "#fff",
-                      color:
-                        communityFilter === type
-                          ? "#fff"
-                          : profile.theme.primary,
-                      borderColor:
-                        communityFilter === type
-                          ? profile.theme.primary
-                          : "#E5E7EB",
-                      boxShadow:
-                        communityFilter === type
-                          ? `0 0 0 3px ${profile.theme.primary}33`
-                          : "none",
+                      background: isActive
+                        ? `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`
+                        : "#FFFFFF",
+                      color: isActive ? "#FFFFFF" : profile.theme.primary,
+                      borderColor: isActive ? profile.theme.primary : "#E2E8F0",
+                      boxShadow: isActive
+                        ? `0 10px 30px ${profile.theme.primary}22`
+                        : "none",
                     }}
                   >
-                    {type === "all"
-                      ? `All (${allCommunityItems.length})`
-                      : type === "An activity, event, class, or opportunity"
-                        ? `Activities (${
-                            allCommunityItems.filter(
-                              (item) =>
-                                item.submissionType ===
-                                "An activity, event, class, or opportunity",
-                            ).length
-                          })`
-                        : type === "A resource, article, tip, or link"
-                          ? `Resources (${
-                              allFutureCommunityItems.filter(
-                                (item) =>
-                                  item.submissionType ===
-                                  "A resource, article, tip, or link",
-                              ).length
-                            })`
-                          : `Documents (${
-                              allFutureCommunityItems.filter(
-                                (item) =>
-                                  item.submissionType ===
-                                  "A helpful Document, template, or guide",
-                              ).length
-                            })`}
+                    {type}
                   </button>
-                ))}
-              </div>
-            )}
+                );
+              })}
 
+              <button
+                type="button"
+                onClick={() => setShareTypeFilter("Following")}
+                className="rounded-full border px-5 py-3 text-sm font-black transition hover:-translate-y-0.5 hover:shadow-md"
+                style={{
+                  background:
+                    shareTypeFilter === "Following"
+                      ? `linear-gradient(135deg, ${profile.theme.primary}, ${profile.theme.secondary})`
+                      : "#FFFFFF",
+                  color:
+                    shareTypeFilter === "Following"
+                      ? "#FFFFFF"
+                      : profile.theme.primary,
+                  borderColor:
+                    shareTypeFilter === "Following"
+                      ? profile.theme.primary
+                      : "#E2E8F0",
+                  boxShadow:
+                    shareTypeFilter === "Following"
+                      ? `0 10px 30px ${profile.theme.primary}22`
+                      : "none",
+                }}
+              >
+                Following
+              </button>
+            </div>
+            {/* STEP 31AS — Search Your Local Mix */}
+            <div className="mt-6 relative max-w-xl">
+              <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-slate-400"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+              </div>
+
+              <input
+                type="search"
+                value={recommendationSearch}
+                onChange={(event) =>
+                  setRecommendationSearch(event.target.value)
+                }
+                placeholder="Search events, resources, opportunities..."
+                aria-label="Search Your Local Mix"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-5 text-sm font-semibold text-[#071A4A] shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
             <p className="mt-3 max-w-2xl text-gray-600">
               Local events, resources, and opportunities based on your
               interests.
             </p>
             <p className="mt-2 text-sm font-bold text-[#071A4A]">
-              Showing {activeItems.length}{" "}
-              {activeSection === "events" ? "activities" : "submissions"}
+              Showing {activeItems.length} items
             </p>
           </div>
 
@@ -4061,12 +4237,31 @@ export default function PersonalizedRecommendationsPage() {
                 theme={profile.theme}
               />
             </div>
-            {activeSection === "hub" && (
-              <div className="mt-10">
-                <LocalDirectory theme={profile.theme} viewerToken={token} />
-              </div>
-            )}
           </div>
+        </div>
+      </section>
+
+      <section className="relative z-10 px-4 pb-12 md:px-6 md:pb-16">
+        <div className="mx-auto w-full max-w-7xl px-4">
+          <div className="mb-8">
+            <p
+              className="text-sm font-black uppercase tracking-[0.28em]"
+              style={{ color: profile.theme.secondary }}
+            >
+              Local Directory
+            </p>
+
+            <h2 className="mt-3 text-3xl font-black text-[#071A4A] md:text-4xl">
+              Connect With Local People & Businesses
+            </h2>
+
+            <p className="mt-2 max-w-3xl text-slate-600">
+              Explore local members, businesses, organizations, and community
+              connections.
+            </p>
+          </div>
+
+          <LocalDirectory theme={profile.theme} viewerToken={token} />
         </div>
       </section>
       {/* floating AI delight */}
@@ -4102,7 +4297,9 @@ export default function PersonalizedRecommendationsPage() {
           />
 
           <div className="relative z-10">
-            <p className="text-sm font-black uppercase tracking-[0.35em] text-slate-500">
+            <div className="text-4xl">{profile.theme.delightIcon || "✨"}</div>
+
+            <p className="mt-4 text-sm font-black uppercase tracking-[0.35em] text-slate-500">
               BridgeAZ
             </p>
 
@@ -4112,14 +4309,13 @@ export default function PersonalizedRecommendationsPage() {
                 color: profile.theme.primary,
               }}
             >
-              Open Today’s Local Pulse
+              {profile.theme.delightLabel || "Grow Locally"}
             </h3>
 
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
-              Discover stories, events, local updates, and moments happening
-              around your community.
+              {profile.theme.delightMessage ||
+                "Discover stories, events, local updates, and moments happening around your community."}
             </p>
-
             <motion.a
               href="https://bridgenewsaz.co/"
               target="_blank"
@@ -4254,7 +4450,7 @@ export default function PersonalizedRecommendationsPage() {
                     transition={{
                       repeat: Infinity,
                       duration: 5,
-                      ease: "easeInOut",
+                      ease: animationEase,
                     }}
                     opacity="0.7"
                   />
@@ -4273,7 +4469,7 @@ export default function PersonalizedRecommendationsPage() {
                         repeat: Infinity,
                         duration: 2.4,
                         delay: index * 0.22,
-                        ease: "easeInOut",
+                        ease: animationEase,
                       }}
                     >
                       <circle

@@ -13,12 +13,50 @@ import {
 
 import { auth } from "./firebase";
 
+const SHARE_TYPE_OPTIONS = [
+  {
+    value: "Event or Activity",
+    description: "Something happening at a particular time or place.",
+  },
+  {
+    value: "Helpful Information or Resource",
+    description:
+      "Advice, tips, expertise, guides, how-tos, educational information, community resources, checklists or useful links.",
+  },
+  {
+    value: "Opportunity",
+    description:
+      "Job, volunteer opportunity, internship, mentorship, program, class, grant, sponsorship, vendor opportunity, audition or another way to participate.",
+  },
+  {
+    value: "Promotion or Special",
+    description:
+      "Sale, discount, offer, package, grand opening or other promotion.",
+  },
+  {
+    value: "News or Announcement",
+    description:
+      "Something new or noteworthy involving a person, business, organization or community.",
+  },
+  {
+    value: "Person, Business or Group Spotlight",
+    description:
+      "A local person, business, band, nonprofit, club, team, organization, artist or other group worth highlighting.",
+  },
+  {
+    value: "Something Else",
+    description: "Anything that does not clearly fit the other choices.",
+  },
+];
+
 export default function ShareWithBridgePage() {
   const [screen, setScreen] = useState("menu");
 
+  const [shareType, setShareType] = useState("");
+
   const [sessionId, setSessionId] = useState("");
   const [submissionId, setSubmissionId] = useState("");
-const [submissionMode, setSubmissionMode] = useState("single");
+  const [submissionMode, setSubmissionMode] = useState("single");
   const [description, setDescription] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceFile, setSourceFile] = useState(null);
@@ -27,9 +65,9 @@ const [submissionMode, setSubmissionMode] = useState("single");
   const [uploadedImageSource, setUploadedImageSource] = useState(null);
   const [question, setQuestion] = useState("");
   const [followUpAnswer, setFollowUpAnswer] = useState("");
-const [startingMode, setStartingMode] = useState("");
+  const [startingMode, setStartingMode] = useState("");
   const [processing, setProcessing] = useState(false);
-const [showNoImageWarning, setShowNoImageWarning] = useState(false);
+  const [showNoImageWarning, setShowNoImageWarning] = useState(false);
   const [error, setError] = useState("");
   const [reviewRecords, setReviewRecords] = useState([]);
   const [reviewForms, setReviewForms] = useState({});
@@ -218,82 +256,82 @@ const [showNoImageWarning, setShowNoImageWarning] = useState(false);
      START NEW SESSION
   ===================================================== */
 
- const handleNewSubmission = async (mode = "single") => {
-   try {
-  setSubmissionMode(mode);
-  setStartingMode(mode);
-     setError("");
+  const handleNewSubmission = async (mode = "single") => {
+    try {
+      setSubmissionMode(mode);
+      setStartingMode(mode);
+      setError("");
 
-     const currentUser = auth.currentUser;
+      const currentUser = auth.currentUser;
 
-     if (!currentUser) {
-       setError("You need to be signed in.");
-       return;
-     }
+      if (!currentUser) {
+        setError("You need to be signed in.");
+        return;
+      }
 
-     const idToken = await currentUser.getIdToken();
+      const idToken = await currentUser.getIdToken();
 
-     const response = await fetch(
-       "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/start",
-       {
-         method: "POST",
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/start",
+        {
+          method: "POST",
 
-         headers: {
-           "Content-Type": "application/json",
-           Authorization: `Bearer ${idToken}`,
-         },
-       },
-     );
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+        },
+      );
 
-     const data = await response.json();
+      const data = await response.json();
 
-     console.log("SHARE WITH BRIDGE START:", response.status, data);
+      console.log("SHARE WITH BRIDGE START:", response.status, data);
 
-     if (!response.ok || !data?.success || !data?.sessionId) {
-       setError(
-         data?.error || "Could not start your Share With Bridge session.",
-       );
+      if (!response.ok || !data?.success || !data?.sessionId) {
+        setError(
+          data?.error || "Could not start your Share With Bridge session.",
+        );
 
-       return;
-     }
+        return;
+      }
 
-     setSessionId(data.sessionId);
-     setScreen("new");
+      setSessionId(data.sessionId);
+      setShareType("");
+      setScreen("share-type");
 
-     setUploadedImageSource(null);
-     setUploadedSource(null);
-   } catch (error) {
-     console.error("Share With Bridge START failed:", error);
+      setUploadedImageSource(null);
+      setUploadedSource(null);
+    } catch (error) {
+      console.error("Share With Bridge START failed:", error);
 
-     setError("Could not start your Share With Bridge session.");
-   } finally {
-    setStartingMode("");
-   }
- };
+      setError("Could not start your Share With Bridge session.");
+    } finally {
+      setStartingMode("");
+    }
+  };
 
   /* =====================================================
      FIRST PROCESS
   ===================================================== */
 
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
 
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
 
-    reader.onload = () => {
-      const result = String(reader.result || "");
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
 
-      const base64 = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64);
+      };
 
-      resolve(base64);
-    };
+      reader.onerror = () => {
+        reject(new Error("Could not read the selected file."));
+      };
 
-    reader.onerror = () => {
-      reject(new Error("Could not read the selected file."));
-    };
-
-    reader.readAsDataURL(file);
-  });
+      reader.readAsDataURL(file);
+    });
 
   const handleReviewImageUpload = async (
     recordKey,
@@ -358,8 +396,6 @@ const fileToBase64 = (file) =>
     }
   };
 
-
-
   const handleProcessSubmission = async () => {
     try {
       setError("");
@@ -367,12 +403,12 @@ const fileToBase64 = (file) =>
       const cleanDescription = description.trim();
       const cleanSourceUrl = sourceUrl.trim();
 
-if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
-  setError(
-    "Please describe what you want to share, add a link, upload an image, or upload a document.",
-  );
-  return;
-}
+      if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
+        setError(
+          "Please describe what you want to share, add a link, upload an image, or upload a document.",
+        );
+        return;
+      }
 
       if (!sessionId) {
         setError("Your Share With Bridge session is missing.");
@@ -398,7 +434,6 @@ if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
           kind: "website",
         });
       }
-
 
       if (imageFile) {
         const base64Data = await fileToBase64(imageFile);
@@ -488,7 +523,7 @@ if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
 
           body: JSON.stringify({
             sessionId,
-
+            shareType,
             submissionMode,
 
             description: cleanDescription,
@@ -592,6 +627,7 @@ if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
           body: JSON.stringify({
             sessionId,
             submissionMode,
+            shareType,
             description: description.trim(),
 
             sourceUrl: sourceUrl.trim(),
@@ -637,103 +673,107 @@ if (!cleanDescription && !cleanSourceUrl && !sourceFile && !imageFile) {
     }
   };
 
-const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
-  try {
-    setError("");
+  const handleResumeSession = async (resumeSessionId, savedFields = {}) => {
+    try {
+      setError("");
 
-    const cleanSessionId = String(resumeSessionId || "").trim();
+      const cleanSessionId = String(resumeSessionId || "").trim();
 
-    if (!cleanSessionId) {
-      setError("This saved draft could not be identified.");
-      return;
-    }
+      if (!cleanSessionId) {
+        setError("This saved draft could not be identified.");
+        return;
+      }
 
-    const currentUser = auth.currentUser;
+      const currentUser = auth.currentUser;
 
-    if (!currentUser) {
-      setError("You need to be signed in.");
-      return;
-    }
+      if (!currentUser) {
+        setError("You need to be signed in.");
+        return;
+      }
 
-    setProcessing(true);
+      setProcessing(true);
 
-    const idToken = await currentUser.getIdToken();
+      const idToken = await currentUser.getIdToken();
 
-    const response = await fetch(
-      "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/resume",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            sessionId: cleanSessionId,
+          }),
         },
-        body: JSON.stringify({
-          sessionId: cleanSessionId,
-        }),
-      },
-    );
+      );
 
-    const data = await response.json();
+      const data = await response.json();
 
-    console.log("SHARE WITH BRIDGE RESUME:", response.status, data);
+      console.log("SHARE WITH BRIDGE RESUME:", response.status, data);
 
-    if (!response.ok || !data?.success) {
-      setError(data?.message || data?.error || "Could not resume this draft.");
-      return;
-    }
+      if (!response.ok || !data?.success) {
+        setError(
+          data?.message || data?.error || "Could not resume this draft.",
+        );
+        return;
+      }
 
-    /* =====================================================
+      /* =====================================================
        NORMALIZE SESSION LOOKUP
     ===================================================== */
 
-    let sessionLookup = data?.sessionLookup || data?.session || null;
+      let sessionLookup = data?.sessionLookup || data?.session || null;
 
-    if (typeof sessionLookup === "string") {
-      try {
-        sessionLookup = JSON.parse(sessionLookup);
-      } catch {
-        sessionLookup = null;
+      if (typeof sessionLookup === "string") {
+        try {
+          sessionLookup = JSON.parse(sessionLookup);
+        } catch {
+          sessionLookup = null;
+        }
       }
-    }
 
-    const sessionRecord =
-      sessionLookup?.records?.[0] ||
-      sessionLookup?.body?.records?.[0] ||
-      sessionLookup ||
-      null;
+      const sessionRecord =
+        sessionLookup?.records?.[0] ||
+        sessionLookup?.body?.records?.[0] ||
+        sessionLookup ||
+        null;
 
-  const fields =
-    sessionRecord?.fields && Object.keys(sessionRecord.fields).length > 0
-      ? sessionRecord.fields
-      : savedFields;
+      const fields =
+        sessionRecord?.fields && Object.keys(sessionRecord.fields).length > 0
+          ? sessionRecord.fields
+          : savedFields;
 
-    /* =====================================================
+      /* =====================================================
        RESTORE SAVED DRAFT
     ===================================================== */
 
-    setSessionId(cleanSessionId);
+      setSessionId(cleanSessionId);
 
-    setDescription(String(fields["Source Text"] || fields.description || ""));
+      setDescription(String(fields["Source Text"] || fields.description || ""));
 
-setSubmissionMode(
-  fields["Submission Mode"] === "Multiple Items" ? "multiple" : "single",
-);
+      setSubmissionMode(
+        fields["Submission Mode"] === "Multiple Items" ? "multiple" : "single",
+      );
 
-    setSourceUrl(String(fields["Source Links"] || fields.source || ""));
+      setShareType(String(fields["Share Type"] || ""));
 
-    setSubmissionId("");
-    setQuestion("");
-    setFollowUpAnswer("");
+      setSourceUrl(String(fields["Source Links"] || fields.source || ""));
 
-    setScreen("new");
-  } catch (error) {
-    console.error("Share With Bridge RESUME failed:", error);
+      setSubmissionId("");
+      setQuestion("");
+      setFollowUpAnswer("");
 
-    setError("Could not resume this draft.");
-  } finally {
-    setProcessing(false);
-  }
-};
+      setScreen("new");
+    } catch (error) {
+      console.error("Share With Bridge RESUME failed:", error);
+
+      setError("Could not resume this draft.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const handleLoadSessions = async () => {
     try {
@@ -850,7 +890,7 @@ setSubmissionMode(
 
               ...(uploadedSource ? [uploadedSource] : []),
             ],
-
+            shareType,
             followUpAnswer: cleanAnswer,
           }),
         },
@@ -949,28 +989,28 @@ setSubmissionMode(
         return;
       }
 
-    const records = Array.isArray(data?.records) ? data.records : [];
+      const records = Array.isArray(data?.records) ? data.records : [];
 
-    const sortedRecords = [...records].sort((a, b) => {
-      const aId = String(a?.fields?.["Submission ID"] || "");
-      const bId = String(b?.fields?.["Submission ID"] || "");
+      const sortedRecords = [...records].sort((a, b) => {
+        const aId = String(a?.fields?.["Submission ID"] || "");
+        const bId = String(b?.fields?.["Submission ID"] || "");
 
-      const getBatchNumber = (id) => {
-        const match = id.match(/__batch_(\d+)$/);
+        const getBatchNumber = (id) => {
+          const match = id.match(/__batch_(\d+)$/);
 
-        return match ? Number(match[1]) : 1;
-      };
+          return match ? Number(match[1]) : 1;
+        };
 
-      return getBatchNumber(aId) - getBatchNumber(bId);
-    });
+        return getBatchNumber(aId) - getBatchNumber(bId);
+      });
 
-    const forms = {};
+      const forms = {};
 
-     sortedRecords.forEach((record, index) => {
-       forms[getReviewRecordKey(record, index)] = createReviewForm(record);
-     });
+      sortedRecords.forEach((record, index) => {
+        forms[getReviewRecordKey(record, index)] = createReviewForm(record);
+      });
 
-    setReviewRecords(sortedRecords);
+      setReviewRecords(sortedRecords);
       setReviewForms(forms);
       setReviewSavedId("");
       setScreen("review");
@@ -1089,162 +1129,166 @@ setSubmissionMode(
     }
   };
 
- const handleApproveReview = async (
-   record,
-   index,
-   skipImageWarning = false,
- ) => {
-   const recordKey = getReviewRecordKey(record, index);
-   const fields = record?.fields || {};
-   const currentSubmissionId = String(fields["Submission ID"] || "").trim();
-
-   try {
-     setError("");
-     setReviewApprovedId("");
-
-     if (!sessionId) {
-       setError("Your Share With Bridge session is missing.");
-       return;
-     }
-
-     if (!currentSubmissionId) {
-       setError("This Share With Bridge submission ID is missing.");
-       return;
-     }
-
-     /*
-      Require the member to save their latest edits first.
-    */
-if (reviewSavedId !== recordKey) {
-  setError("Please save your latest changes before approving this submission.");
-  return;
-}
-
-const imageAttachments = Array.isArray(fields["Image"]) ? fields["Image"] : [];
-
-const hasImage =
-  imageAttachments.length > 0 || Boolean(reviewImageFiles[recordKey]);
-
-if (!hasImage && !skipImageWarning) {
-  setPendingApproval({
+  const handleApproveReview = async (
     record,
     index,
-  });
+    skipImageWarning = false,
+  ) => {
+    const recordKey = getReviewRecordKey(record, index);
+    const fields = record?.fields || {};
+    const currentSubmissionId = String(fields["Submission ID"] || "").trim();
 
-  setShowNoImageWarning(true);
-  return;
-}
+    try {
+      setError("");
+      setReviewApprovedId("");
 
-const currentUser = auth.currentUser;
+      if (!sessionId) {
+        setError("Your Share With Bridge session is missing.");
+        return;
+      }
 
-     if (!currentUser) {
-       setError("You need to be signed in.");
-       return;
-     }
+      if (!currentSubmissionId) {
+        setError("This Share With Bridge submission ID is missing.");
+        return;
+      }
 
-     setApprovingReviewId(recordKey);
+      /*
+      Require the member to save their latest edits first.
+    */
+      if (reviewSavedId !== recordKey) {
+        setError(
+          "Please save your latest changes before approving this submission.",
+        );
+        return;
+      }
 
-     const idToken = await currentUser.getIdToken();
+      const imageAttachments = Array.isArray(fields["Image"])
+        ? fields["Image"]
+        : [];
 
-     const response = await fetch(
-       "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/review-approve",
-       {
-         method: "POST",
+      const hasImage =
+        imageAttachments.length > 0 || Boolean(reviewImageFiles[recordKey]);
 
-         headers: {
-           "Content-Type": "application/json",
-           Authorization: `Bearer ${idToken}`,
-         },
+      if (!hasImage && !skipImageWarning) {
+        setPendingApproval({
+          record,
+          index,
+        });
 
-         body: JSON.stringify({
-           sessionId,
-           submissionId: currentSubmissionId,
-           confirmApproval: true,
-         }),
-       },
-     );
+        setShowNoImageWarning(true);
+        return;
+      }
 
-     const data = await response.json();
+      const currentUser = auth.currentUser;
 
-     console.log("SHARE WITH BRIDGE REVIEW_APPROVE:", response.status, data);
+      if (!currentUser) {
+        setError("You need to be signed in.");
+        return;
+      }
 
-     if (!response.ok || !data?.success) {
-       setError(
-         data?.message || data?.error || "Could not approve this submission.",
-       );
+      setApprovingReviewId(recordKey);
 
-       return;
-     }
+      const idToken = await currentUser.getIdToken();
 
-     const returnedFields = data?.record?.fields || null;
+      const response = await fetch(
+        "https://bridgeaz-recommendations-server.vercel.app/api/share-with-bridge/review-approve",
+        {
+          method: "POST",
 
-     setReviewRecords((current) =>
-       current.map((item, itemIndex) => {
-         const itemKey = getReviewRecordKey(item, itemIndex);
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
 
-         if (itemKey !== recordKey) {
-           return item;
-         }
+          body: JSON.stringify({
+            sessionId,
+            submissionId: currentSubmissionId,
+            confirmApproval: true,
+          }),
+        },
+      );
 
-         return {
-           ...item,
-           fields: {
-             ...(item?.fields || {}),
-             ...(returnedFields || {}),
-             Status: "Signed Off",
-             "Contributor Signed Off": true,
-           },
-         };
-       }),
-     );
+      const data = await response.json();
 
-     setReviewApprovedId(recordKey);
-     setReviewSavedId("");
-   } catch (error) {
-     console.error("Share With Bridge REVIEW_APPROVE failed:", error);
+      console.log("SHARE WITH BRIDGE REVIEW_APPROVE:", response.status, data);
 
-     setError("Could not approve this submission.");
-   } finally {
-     setApprovingReviewId("");
-   }
- };
+      if (!response.ok || !data?.success) {
+        setError(
+          data?.message || data?.error || "Could not approve this submission.",
+        );
+
+        return;
+      }
+
+      const returnedFields = data?.record?.fields || null;
+
+      setReviewRecords((current) =>
+        current.map((item, itemIndex) => {
+          const itemKey = getReviewRecordKey(item, itemIndex);
+
+          if (itemKey !== recordKey) {
+            return item;
+          }
+
+          return {
+            ...item,
+            fields: {
+              ...(item?.fields || {}),
+              ...(returnedFields || {}),
+              Status: "Signed Off",
+              "Contributor Signed Off": true,
+            },
+          };
+        }),
+      );
+
+      setReviewApprovedId(recordKey);
+      setReviewSavedId("");
+    } catch (error) {
+      console.error("Share With Bridge REVIEW_APPROVE failed:", error);
+
+      setError("Could not approve this submission.");
+    } finally {
+      setApprovingReviewId("");
+    }
+  };
 
   /* =====================================================
      RESET
   ===================================================== */
 
+  const handleAddAnotherSubmission = () => {
+    // Keep the same sessionId.
+    // Keep submissionMode = "multiple".
 
-const handleAddAnotherSubmission = () => {
-  // Keep the same sessionId.
-  // Keep submissionMode = "multiple".
+    setSubmissionId("");
 
-  setSubmissionId("");
+    setDescription("");
+    setSourceUrl("");
+    setSourceFile(null);
+    setUploadedSource(null);
+    setQuestion("");
+    setFollowUpAnswer("");
 
-  setDescription("");
-  setSourceUrl("");
-  setSourceFile(null);
-setUploadedSource(null);
-  setQuestion("");
-  setFollowUpAnswer("");
+    setReviewRecords([]);
+    setReviewForms({});
+    setSavingReviewId("");
+    setReviewSavedId("");
+    setApprovingReviewId("");
+    setReviewApprovedId("");
 
-  setReviewRecords([]);
-  setReviewForms({});
-  setSavingReviewId("");
-  setReviewSavedId("");
-  setApprovingReviewId("");
-  setReviewApprovedId("");
-
-  setError("");
-
-  setScreen("new");
-};
+    setError("");
+setShareType("");
+    setScreen("new");
+  };
 
   const handleBackToMenu = () => {
     setScreen("menu");
 
     setSessionId("");
+    setShareType("");
     setSubmissionId("");
-setSubmissionMode("single");
+    setSubmissionMode("single");
     setDescription("");
     setSourceUrl("");
 
@@ -1264,7 +1308,6 @@ setSubmissionMode("single");
 ===================================================== */
 
   if (screen === "sessions") {
-    
     const filteredSessions = savedSessions.filter((session) => {
       const fields = session?.fields || session || {};
 
@@ -1311,7 +1354,7 @@ setSubmissionMode("single");
       return bDate - aDate;
     });
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+      <div className="min-h-screen bg-linear-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
         <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
           <button
             type="button"
@@ -1376,25 +1419,26 @@ setSubmissionMode("single");
                 const currentSessionId =
                   fields["Session ID"] || fields.sessionId || "";
 
-             const rawStatus = fields.Status || fields.status || "Unknown";
+                const rawStatus = fields.Status || fields.status || "Unknown";
 
-           const status = sessionTab === "previous" ? "Complete" : rawStatus;
+                const status =
+                  sessionTab === "previous" ? "Complete" : rawStatus;
 
-           const submissionMode = String(
-             fields["Submission Mode"] || "",
-           ).trim();
+                const submissionMode = String(
+                  fields["Submission Mode"] || "",
+                ).trim();
 
-           const submissionCount = Number(fields["Submission Count"] || 0);
+                const submissionCount = Number(fields["Submission Count"] || 0);
 
-           const isMultipleSession = submissionMode === "Multiple Items";
+                const isMultipleSession = submissionMode === "Multiple Items";
 
-           const description = isMultipleSession
-             ? `Multiple Submissions — ${submissionCount} ${
-                 submissionCount === 1 ? "item" : "items"
-               }`
-             : fields["Source Text"] ||
-               fields.description ||
-               "Untitled submission";
+                const description = isMultipleSession
+                  ? `Multiple Submissions — ${submissionCount} ${
+                      submissionCount === 1 ? "item" : "items"
+                    }`
+                  : fields["Source Text"] ||
+                    fields.description ||
+                    "Untitled submission";
 
                 return (
                   <div
@@ -1441,7 +1485,7 @@ setSubmissionMode("single");
 
   if (screen === "question") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+      <div className="min-h-screen bg-linear-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
         <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
           <button
             type="button"
@@ -1462,7 +1506,7 @@ setSubmissionMode("single");
             </h1>
 
             <p className="mt-3 text-base leading-7 text-slate-600">
-              Bridge  found most of what it needs, but it needs a little more
+              Bridge found most of what it needs, but it needs a little more
               information before preparing your submission for review.
             </p>
           </div>
@@ -1496,7 +1540,7 @@ setSubmissionMode("single");
               type="button"
               onClick={handleFollowUp}
               disabled={processing}
-              className={`mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-4 text-sm font-black text-white transition ${
+              className={`mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-4 text-sm font-black text-white transition ${
                 processing
                   ? "cursor-wait opacity-70"
                   : "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg"
@@ -1528,59 +1572,59 @@ setSubmissionMode("single");
           fields["Status"] === "Signed Off" ||
           fields["Contributor Signed Off"] === true
         );
-      });if (
-        submissionMode === "multiple" &&
-        reviewRecords.length > 1 &&
-        allReviewItemsApproved
-      ) {
-        return (
-          <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
-            
-            <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
-              <div className="mt-8 overflow-hidden rounded-[32px] border border-emerald-100 bg-white shadow-sm">
-                <div className="px-6 py-14 text-center sm:px-10 sm:py-16">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                    <Sparkles size={28} />
-                  </div>
+      });
+    if (
+      submissionMode === "multiple" &&
+      reviewRecords.length > 1 &&
+      allReviewItemsApproved
+    ) {
+      return (
+        <div className="min-h-screen bg-linear-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+          <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+            <div className="mt-8 overflow-hidden rounded-4xl border border-emerald-100 bg-white shadow-sm">
+              <div className="px-6 py-14 text-center sm:px-10 sm:py-16">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                  <Sparkles size={28} />
+                </div>
 
-                  <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
-                    Complete
-                  </p>
+                <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
+                  Complete
+                </p>
 
-                  <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                    Thank you! All submissions are complete.
-                  </h2>
+                <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                  Thank you! All submissions are complete.
+                </h2>
 
-                  <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
-                    Bridge has saved all {reviewRecords.length} submissions in
-                    this batch.
-                  </p>
+                <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
+                  Bridge has saved all {reviewRecords.length} submissions in
+                  this batch.
+                </p>
 
-                  <div className="mt-7 flex flex-wrap justify-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleAddAnotherSubmission}
-                      className="cursor-pointer rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-6 py-3.5 text-sm font-black text-white"
-                    >
-                      Add Another
-                    </button>
+                <div className="mt-7 flex flex-wrap justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAddAnotherSubmission}
+                    className="cursor-pointer rounded-2xl bg-linear-to-r from-[#7C3AED] to-[#A92EFF] px-6 py-3.5 text-sm font-black text-white"
+                  >
+                    Add Another
+                  </button>
 
-                    <button
-                      type="button"
-                      onClick={handleBackToMenu}
-                      className="cursor-pointer rounded-2xl border border-purple-200 bg-white px-6 py-3.5 text-sm font-black text-[#7C3AED]"
-                    >
-                      I'm Finished
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBackToMenu}
+                    className="cursor-pointer rounded-2xl border border-purple-200 bg-white px-6 py-3.5 text-sm font-black text-[#7C3AED]"
+                  >
+                    I'm Finished
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-        );
-      }
+        </div>
+      );
+    }
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+      <div className="min-h-screen bg-linear-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
         {showNoImageWarning && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
@@ -1639,8 +1683,8 @@ setSubmissionMode("single");
             Back
           </button>
 
-          <div className="mt-8 overflow-hidden rounded-[32px] border border-purple-100 bg-white shadow-[0_20px_70px_rgba(124,58,237,0.10)]">
-            <div className="border-b border-purple-100 bg-gradient-to-br from-[#FBF8FF] via-white to-[#F4ECFF] px-6 py-8 sm:px-10 sm:py-10">
+          <div className="mt-8 overflow-hidden rounded-4xlrder border-purple-100 bg-white shadow-[0_20px_70px_rgba(124,58,237,0.10)]">
+            <div className="border-b border-purple-100 bg-linear-to-br from-[#FBF8FF] via-white to-[#F4ECFF] px-6 py-8 sm:px-10 sm:py-10">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-white text-[#7C3AED] shadow-sm ring-1 ring-purple-100">
@@ -1759,7 +1803,7 @@ setSubmissionMode("single");
                             <div className="border-t border-emerald-100 bg-emerald-50/30 px-6 py-5 sm:px-8">
                               <Link
                                 to="/"
-                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-3.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-rrom-[#7C3AED] to-[#A92EFF] px-5 py-3.5 text-sm font-black text-white transition hover:-translate-y-0.5 hover:shadow-lg"
                               >
                                 <ArrowLeft size={18} />
                                 Back to Home
@@ -2075,7 +2119,7 @@ setSubmissionMode("single");
                               type="button"
                               onClick={() => handleSaveReview(record, index)}
                               disabled={isSaving}
-                              className={`flex min-w-[150px] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-3 text-sm font-black text-white transition ${
+                              className={`flex min-w-37.5 items-center justify-center gap-2 rounded-2xl bg-linear-to-rrom-[#7C3AED] to-[#A92EFF] px-5 py-3 text-sm font-black text-white transition ${
                                 isSaving
                                   ? "cursor-wait opacity-70"
                                   : "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg"
@@ -2094,7 +2138,7 @@ setSubmissionMode("single");
                                   handleApproveReview(record, index)
                                 }
                                 disabled={isApproving}
-                                className={`flex min-w-[180px] items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition ${
+                                className={`flex min-w-45s-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition ${
                                   isApproving
                                     ? "cursor-wait opacity-70"
                                     : "cursor-pointer hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-lg"
@@ -2122,7 +2166,6 @@ setSubmissionMode("single");
       </div>
     );
   }
-  
 
   /* =====================================================
      TEMP READY FOR REVIEW SCREEN
@@ -2130,7 +2173,7 @@ setSubmissionMode("single");
 
   if (screen === "ready") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+      <div className="min-h-screen bg-linear-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
         <div className="mx-auto max-w-3xl px-5 py-12 sm:px-8">
           <div className="rounded-3xl border border-purple-100 bg-white p-8 text-center shadow-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50 text-[#7C3AED]">
@@ -2142,8 +2185,8 @@ setSubmissionMode("single");
             </h1>
 
             <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
-              Bridge has prepared your submission. The review screen is the
-              next part we&apos;ll connect.
+              Bridge has prepared your submission. The review screen is the next
+              part we&apos;ll connect.
             </p>
 
             <p className="mt-6 break-all text-xs text-slate-400">
@@ -2166,13 +2209,110 @@ setSubmissionMode("single");
      NEW SUBMISSION SCREEN
   ===================================================== */
 
-  if (screen === "new") {
+  /* =====================================================
+   SHARE TYPE SCREEN
+===================================================== */
+
+  if (screen === "share-type") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+      <div className="min-h-screen bg-linear-to-brom-[#FBF8FF] via-white to-[#F7F3FF]">
         <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
           <button
             type="button"
-            onClick={handleBackToMenu}
+         onClick={handleBackToMenu}
+            className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#7C3AED]"
+          >
+            <ArrowLeft size={18} />
+            Back
+          </button>
+
+          <div className="mt-10">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0E7FF] text-[#7C3AED]">
+              <Sparkles size={23} />
+            </div>
+
+            <h1 className="mt-5 text-3xl font-bold text-slate-900 sm:text-4xl">
+              Share an:
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
+              Choose the type of thing you want to share with Bridge.
+            </p>
+          </div>
+
+          <div className="mt-8 space-y-3">
+            {SHARE_TYPE_OPTIONS.map((option) => {
+              const selected = shareType === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setShareType(option.value)}
+                  className={`w-full cursor-pointer rounded-2xl border p-5 text-left transition ${
+                    selected
+                      ? "border-[#7C3AED] bg-purple-50 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-purple-300 hover:shadow-sm"
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                        selected
+                          ? "border-[#7C3AED] bg-[#7C3AED]"
+                          : "border-slate-300 bg-white"
+                      }`}
+                    >
+                      {selected && (
+                        <div className="h-2 w-2 rounded-full bg-white" />
+                      )}
+                    </div>
+
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900">
+                        {option.value}
+                      </h2>
+
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {option.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!shareType) return;
+
+              console.log("SHARE TYPE SELECTED:", shareType);
+
+              setScreen("new");
+            }}
+            disabled={!shareType}
+            className={`mt-7 flex w-full items-center justify-center rounded-2xl px-5 py-4 text-sm font-black text-white transition ${
+              shareType
+                ? "cursor-pointer bg-linear-to-r from-[#7C3AED] to-[#A92EFF] hover:-translate-y-0.5 hover:shadow-lg"
+                : "cursor-not-allowed bg-slate-300"
+            }`}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === "new") {
+    return (
+      <div className="min-h-screen bg-linear-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+        <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+          <button
+            type="button"
+            onClick={() => setScreen("share-type")}
             className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-[#7C3AED]"
           >
             <ArrowLeft size={18} />
@@ -2461,7 +2601,7 @@ setSubmissionMode("single");
               type="button"
               onClick={handleProcessSubmission}
               disabled={processing}
-              className={`mt-7 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-4 text-sm font-black text-white transition ${
+              className={`mt-7 flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-[#7C3AED] to-[#A92EFF] px-5 py-4 text-sm font-black text-white transition ${
                 processing
                   ? "cursor-wait opacity-70"
                   : "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg"
@@ -2469,9 +2609,7 @@ setSubmissionMode("single");
             >
               {processing && <Loader2 size={18} className="animate-spin" />}
 
-              {processing
-                ? "Bridge is preparing..."
-                : "Continue with Bridge"}
+              {processing ? "Bridge is preparing..." : "Continue with Bridge"}
             </button>
 
             <button
@@ -2542,7 +2680,7 @@ setSubmissionMode("single");
   ===================================================== */
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FBF8FF] via-white to-[#F7F3FF]">
+    <div className="min-h-screen bg-linear-to-brom-[#FBF8FF] via-white to-[#F7F3FF]">
       <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
         <Link
           to="/"
@@ -2663,7 +2801,6 @@ setSubmissionMode("single");
           </button>
         </div>
       </div>
-    
     </div>
   );
 }
